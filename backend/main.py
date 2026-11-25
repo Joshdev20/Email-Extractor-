@@ -81,6 +81,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("leadscope")
+# httpx logs full request URLs at INFO, which would include Google API keys.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 google_config = GoogleConfig.from_env()
 TERMINAL_STATES = {"done", "error", "cancelled"}
