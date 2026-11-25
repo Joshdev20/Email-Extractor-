@@ -109,7 +109,7 @@
             <div class="min-w-0 flex-1">
               <p class="text-sm font-bold text-navy-900">Google search is not configured yet</p>
               <p class="mt-1 text-xs leading-5 text-slate-600">
-                Natural-language discovery needs a Google API key and Custom Search Engine ID. Manual domain extraction works without Google. Add credentials on the server, then reload this page.
+                Natural-language discovery uses Google Places API (New). Custom Search JSON API is closed to new customers. Manual domain extraction works without Google. Add a Places API (New) key on the server, then reload this page.
               </p>
             </div>
             <a href="#setup" class="btn-secondary shrink-0 text-xs">Setup guide</a>
@@ -471,15 +471,15 @@
                 <div class="setup-step">
                   <span class="setup-number">1</span>
                   <div>
-                    <p class="text-sm font-bold text-navy-900">Enable the APIs</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">In Google Cloud Console, enable the Custom Search JSON API and, optionally, Places API (New). Billing must be active for Places.</p>
+                    <p class="text-sm font-bold text-navy-900">Enable Places API (New)</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">In Google Cloud Console, enable Places API (New) and attach billing, or get a no-cost Maps Demo Key. Custom Search JSON API is closed to new customers; existing customers can keep using it until January 1, 2027.</p>
                   </div>
                 </div>
                 <div class="setup-step">
                   <span class="setup-number">2</span>
                   <div>
-                    <p class="text-sm font-bold text-navy-900">Create a Programmable Search Engine</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">Create an engine that searches the entire web, then copy its Search engine ID (cx). Create an API key restricted to the enabled APIs.</p>
+                    <p class="text-sm font-bold text-navy-900">Create an API key</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">Restrict the key to Places API (New), not the legacy Places API. For existing Custom Search customers, also create a Programmable Search Engine and copy its Search engine ID (cx).</p>
                   </div>
                 </div>
                 <div class="setup-step">
@@ -491,9 +491,11 @@
                 </div>
               </div>
               <div>
-                <pre class="code-block"><code>GOOGLE_API_KEY=your_google_api_key
+                <pre class="code-block"><code>GOOGLE_PLACES_API_KEY=your_places_api_new_key
+
+# Existing Custom Search customers only:
+GOOGLE_API_KEY=your_google_api_key
 GOOGLE_CSE_ID=your_programmable_search_engine_id
-GOOGLE_PLACES_API_KEY=your_places_api_key
 
 # Optional tuning
 MAX_CONCURRENT_JOBS=3
@@ -501,7 +503,7 @@ JOB_TTL_SECONDS=900
 CRAWL_RATE_LIMIT_SECONDS=0.75</code></pre>
                 <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
                   <p class="font-bold">Quotas and pricing</p>
-                  <p class="mt-1">Google Custom Search has a free daily query allowance and charges beyond it. Places API has its own billing and quotas. Limits, prices and availability can change; check Google Cloud Console for current values. LeadScope reports quota errors clearly and never retries in a loop.</p>
+                  <p class="mt-1">Places API (New) is usage-billed. A Maps Demo Key has no billing but a limited daily quota. Custom Search JSON API is closed to new customers; existing customers keep their quota until January 1, 2027. Limits, prices and availability can change; check Google Cloud Console for current values. LeadScope reports quota errors clearly and never retries in a loop.</p>
                 </div>
                 <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs leading-5 text-emerald-900">
                   <p class="font-bold">No database architecture</p>

@@ -15,8 +15,8 @@ storage**. Active jobs live in Python memory. Browser history lives in
 
 - Natural-language search: industry, country, city, email category, target
   count, and optional domains.
-- Google Custom Search JSON API discovery, with optional Google Places API
-  (New) business discovery.
+- Google Places API (New) business discovery, with optional Custom Search
+  JSON API support for existing customers.
 - Async Python crawler with `robots.txt`, link prioritisation, per-domain page
   limits, concurrency limits, timeouts, retries, and cancellation.
 - Email extraction from visible text, `mailto:` links, HTML attributes,
@@ -42,7 +42,7 @@ Browser (HTML/CSS/JS + Tailwind + Font Awesome)
 FastAPI (backend/main.py)
    |-- validator.py      Pydantic input validation
    |-- security.py       SSRF checks, safe fetch, size limits
-   |-- search_engine.py  Google CSE + Places + NL query parser
+   |-- search_engine.py  Google Places + optional CSE + NL query parser
    |-- crawler.py        async crawling, robots.txt, rate limits
    |-- email_extractor.py extraction, dedupe, categorisation
    |
@@ -59,7 +59,8 @@ page it fetched.
 
 - Python 3.10+ (tested on Python 3.13)
 - A modern browser
-- Optional: Google Cloud project with billing for Google search / Places
+- Google Cloud project with Places API (New) and billing, or a Maps Demo Key;
+  optional Custom Search JSON API access for existing customers
 - Optional for development: Node.js 18+ (for the `export.js` tests)
 
 ---
@@ -93,9 +94,9 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GOOGLE_API_KEY` | For Google discovery | Server-side API key for Custom Search JSON API |
-| `GOOGLE_CSE_ID` | For Google discovery | Programmable Search Engine ID (`cx`) |
-| `GOOGLE_PLACES_API_KEY` | Optional | Places API (New) key for business website discovery |
+| `GOOGLE_PLACES_API_KEY` | Recommended | Places API (New) key for business website discovery |
+| `GOOGLE_API_KEY` | Existing CSE customers | Server-side API key for Custom Search JSON API |
+| `GOOGLE_CSE_ID` | Existing CSE customers | Programmable Search Engine ID (`cx`) |
 | `ALLOWED_ORIGINS` | No | CORS origins, default `*`; set explicit origins in production |
 | `MAX_CONCURRENT_JOBS` | No | Concurrent extraction jobs, default `3` |
 | `MAX_JOB_SECONDS` | No | Hard job timeout, default `1800` |
@@ -115,43 +116,80 @@ Google credentials stay on the Python side. The browser never receives them.
 
 ## Google API setup
 
-### 1. Enable APIs
+### Important availability note
 
-In [Google Cloud Console](https://console.cloud.google.com/):
+Google's [Custom Search JSON API](https://developers.google.com/custom-search/v1/overview)
+is **closed to new customers**. Existing customers have until **January 1,
+2027** to migrate. New Google Cloud projects receive:
 
-1. Create or select a project.
-2. Enable **Custom Search JSON API**.
-3. Optionally enable **Places API (New)**. Places requires an active billing
-   account.
-4. Create an API key under **APIs & Services → Credentials**. Restrict the key
-   to the APIs above and, where possible, to your server's IP address.
+```text
+403 — This project does not have the access to Custom Search JSON API.
+```
 
-### 2. Create a Programmable Search Engine
+No API key, OAuth client, or key restriction can change that. For a new
+deployment, use **Places API (New)** instead. The CSE code path remains available
+for projects that already had access before the closure.
 
-1. Open <https://programmablesearchengine.google.com/controlpanel/create>.
-2. Choose **Search the entire web**. A search engine restricted to specific
-   sites will only discover those sites.
+### Recommended: Places API (New)
+
+1. Enable **Places API (New)** in the
+   [Google Cloud console](https://console.cloud.google.com/apis/library/places.googleapis.com).
+2. Attach a billing account, or get a no-cost
+   [Maps Demo Key](https://developers.google.com/maps/demo-key). The demo key
+   requires a personal Google Account, has daily quota limits, and is for
+   prototyping rather than production.
+3. Create an API key under **APIs & Services → Credentials**.
+4. Restrict the key to **Places API (New)**, not the legacy **Places API**.
+   Set application restrictions to **None** for server-side use, or an IP
+   restriction for a fixed server address.
+5. Put the key in `GOOGLE_PLACES_API_KEY`. Leave the CSE variables blank.
+
+Places Text Search is designed for business and category queries such as
+"marketing agencies in Canada". It returns official websites where Google has
+one. It is not a general web search API and does not support search operators
+such as `site:`.
+
+### Optional: Custom Search JSON API (existing customers only)
+
+Use this only if the Google Cloud project already had Custom Search JSON API
+access before the closure.
+
+1. Enable **Custom Search JSON API** in that same project.
+2. Create a Programmable Search Engine at
+   <https://programmablesearchengine.google.com/controlpanel/create> and choose
+   **Search the entire web**.
 3. Copy the **Search engine ID** (`cx`).
+4. Create or reuse an API key in the same project, restricted to **Custom
+   Search API**.
+5. Set `GOOGLE_API_KEY` and `GOOGLE_CSE_ID`.
 
-### 3. Configure and restart
+### Configure and restart
 
 ```dotenv
+# Recommended for new deployments
+GOOGLE_PLACES_API_KEY=your_places_api_new_key
+
+# Existing Custom Search customers only
 GOOGLE_API_KEY=your_google_api_key
 GOOGLE_CSE_ID=your_programmable_search_engine_id
-GOOGLE_PLACES_API_KEY=your_places_api_key
 ```
 
 Restart FastAPI after editing `.env`. `GET /api/health` reports whether each
-integration is configured.
+integration is configured. Places-only discovery works with the CSE variables
+blank.
 
 ### Quotas and pricing
 
-- Custom Search JSON API has a free daily query allowance (currently 100
-  queries/day) and paid queries beyond it, with a daily cap. Each query returns
-  at most 10 results. LeadScope issues up to 6 CSE calls per discovery job by
-  default (up to 60 raw results, before deduplication).
-- Places API (New) is usage-billed. Text Search requests return up to 20 places
-  per call; LeadScope requests no more than the remaining target.
+- Places API (New) is usage-billed. Text Search returns up to 20 places per
+  call. LeadScope requests no more than the remaining website target. The
+  `places.websiteUri` field is in the Text Search Enterprise SKU, so check the
+  current [Places pricing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing)
+  before production use.
+- A Maps Demo Key has no billing but a limited daily quota. It is intended for
+  prototyping.
+- Custom Search JSON API is closed to new customers. Existing customers keep
+  their free daily allowance (currently 100 queries/day) and paid queries until
+  the service ends on January 1, 2027. Each query returns at most 10 results.
 - Limits, prices, and availability change. Check the Google Cloud console and
   the official documentation before relying on them.
 - LeadScope never scrapes Google result pages as a substitute for the API.
@@ -193,7 +231,7 @@ the interpreted plan so users can inspect it before crawling.
 1. **Validate input.** Pydantic models clean domains and URLs. Schemes other
    than HTTP/HTTPS, embedded credentials, non-standard ports, localhost,
    private IPs, and cloud metadata hostnames are rejected.
-2. **Discover websites.** Google CSE and/or Places results are normalised to
+2. **Discover websites.** Google Places and/or CSE results are normalised to
    registrable domains, deduplicated, and ranked. Official company sites rank
    above social networks and directories.
 3. **Crawl politely.** For each site:
@@ -376,7 +414,7 @@ Run the JavaScript export tests:
 node --test tests/export.test.js
 ```
 
-Current results in this environment: **98 Python tests passed** and **6 Node
+Current results in this environment: **102 Python tests passed** and **6 Node
 tests passed**.
 
 Coverage includes:
@@ -443,7 +481,7 @@ business-email-extractor/
 ├── backend/
 │   ├── __init__.py
 │   ├── main.py              FastAPI app, jobs, SSE, middleware
-│   ├── search_engine.py     Google CSE/Places + NL parser
+│   ├── search_engine.py     Google Places + optional CSE + NL parser
 │   ├── crawler.py           async crawler and aggregation
 │   ├── email_extractor.py   extraction, dedupe, categorisation
 │   ├── validator.py         Pydantic request models
@@ -478,12 +516,16 @@ business-email-extractor/
 ## Troubleshooting
 
 **"Google search is not configured"**
-Add `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` to `.env`, then restart the server.
-Manual domain mode does not need Google.
+Add `GOOGLE_PLACES_API_KEY` to `.env` and restart the server. Custom Search
+customers can add `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` instead. Manual domain
+mode does not need Google.
 
 **`503` from `/api/search`**
-The key is missing, invalid, restricted, or the API is not enabled. Check the
-Google Cloud console and the server log.
+The key is missing, invalid, restricted, or the API is not enabled. For Places,
+confirm Places API (New) is enabled, the key allows `places.googleapis.com`, and
+billing or a Maps Demo Key is active. For Custom Search, note that the API is
+closed to new customers; existing projects must enable it in the key's project.
+Check the Google Cloud console and the server log.
 
 **`429`**
 Google quota or the application rate limit was hit. Wait, reduce the target,

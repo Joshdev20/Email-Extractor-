@@ -764,6 +764,14 @@ class GoogleSearch:
                 "quotaExceeded", "RESOURCE_EXHAUSTED",
             }
             config_reasons = {"keyInvalid", "accessNotConfigured", "badRequest", "invalid"}
+            if "does not have the access to custom search json api" in message.lower():
+                raise SearchConfigError(
+                    "Google Custom Search JSON API is closed to new customers and this "
+                    "Google Cloud project does not have access. Use Places API (New) via "
+                    "GOOGLE_PLACES_API_KEY, or use an existing project that already has "
+                    "Custom Search access. See "
+                    "https://developers.google.com/custom-search/v1/overview"
+                )
             if response.status_code == 429 or reason in quota_reasons:
                 raise SearchQuotaError(
                     "Google Custom Search quota or rate limit exceeded. "
@@ -775,9 +783,12 @@ class GoogleSearch:
                     "Check GOOGLE_API_KEY and GOOGLE_CSE_ID."
                 )
             if response.status_code in (401, 403):
+                detail = f" Google said: {message}." if message else ""
                 raise SearchConfigError(
-                    "Google Custom Search access was denied. Verify the API key, "
-                    "Custom Search Engine ID and that the API is enabled."
+                    "Google Custom Search access was denied." + detail +
+                    " Verify the key allows Custom Search API and that the API is enabled "
+                    "in the key's project. Note that Custom Search JSON API is closed to "
+                    "new customers; use Places API (New) instead."
                 )
             raise SearchError(f"Google search failed (HTTP {response.status_code}).")
 
@@ -847,7 +858,10 @@ class GoogleSearch:
                 )
             if response.status_code in (401, 403):
                 raise SearchConfigError(
-                    f"Google Places access was denied: {message or 'check GOOGLE_PLACES_API_KEY'}."
+                    f"Google Places access was denied: {message or 'check GOOGLE_PLACES_API_KEY'}. "
+                    "Enable Places API (New) in the key's project, allow "
+                    "places.googleapis.com on the key, and attach billing or use a "
+                    "Maps Demo Key."
                 )
             raise SearchError(f"Google Places search failed (HTTP {response.status_code}).")
 
@@ -978,7 +992,11 @@ async def discover_websites(
         config_error = any(
             marker in error.lower()
             for error in errors
-            for marker in ("not configured", "credentials", "denied", "api key", "rejected")
+            for marker in (
+                "not configured", "credentials", "denied", "api key", "rejected",
+                "closed to new customers", "does not have access", "billing",
+                "maps demo key",
+            )
         )
         if config_error:
             raise SearchConfigError(errors[0])

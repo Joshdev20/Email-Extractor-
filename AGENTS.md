@@ -27,7 +27,7 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 
 - `backend/main.py` - FastAPI app, in-memory `JobManager`, SSE progress,
   rate limiting, security headers, static frontend serving.
-- `backend/search_engine.py` - Google CSE/Places client, natural-language
+- `backend/search_engine.py` - Google Places/CSE client, natural-language
   `QuerySpec` parser (keyword based, not an LLM), domain ranking.
 - `backend/crawler.py` - async crawler, robots.txt, link priority, per-domain
   limits/rate limiting, cancellation, result aggregation.
@@ -38,6 +38,16 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 - `backend/validator.py` - Pydantic request models and input cleaning.
 - `frontend/` - static mobile-first UI; `export.js` is a UMD module shared with
   the Node tests.
+
+## Google API availability
+
+- Custom Search JSON API is closed to new customers (existing access ends
+  January 1, 2027). New projects get `403 This project does not have the access
+  to Custom Search JSON API`; no credential change fixes that.
+- New deployments use Places API (New), which requires billing or a no-cost
+  Maps Demo Key. The key must allow `places.googleapis.com` (Places API (New)),
+  not the legacy Places API.
+- Places-only discovery works with `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` blank.
 
 ## Invariants
 

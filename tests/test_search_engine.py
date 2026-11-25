@@ -76,6 +76,26 @@ def invalid_key_response() -> httpx.Response:
     )
 
 
+def cse_no_access_response() -> httpx.Response:
+    return httpx.Response(
+        403,
+        json={
+            "error": {
+                "code": 403,
+                "message": "This project does not have the access to Custom Search JSON API.",
+                "errors": [{"reason": "forbidden"}],
+            }
+        },
+    )
+
+
+def places_access_denied_response() -> httpx.Response:
+    return httpx.Response(
+        403,
+        json={"error": {"status": "PERMISSION_DENIED", "message": "Permission denied on the service."}},
+    )
+
+
 def places_quota_response() -> httpx.Response:
     return httpx.Response(
         429,
@@ -174,6 +194,14 @@ async def test_cse_invalid_key_error():
 
 
 @pytest.mark.asyncio
+async def test_cse_closed_to_new_customers_message():
+    fake = FakeGoogle(cse_error=cse_no_access_response())
+    async with await make_client(fake) as client:
+        with pytest.raises(SearchConfigError, match="closed to new customers"):
+            await GoogleSearch(client, CONFIG).cse_search("test")
+
+
+@pytest.mark.asyncio
 async def test_places_search_success():
     fake = FakeGoogle(places=[{
         "displayName": {"text": "Acme"},
@@ -194,6 +222,39 @@ async def test_places_quota_error():
     async with await make_client(fake) as client:
         with pytest.raises(SearchQuotaError):
             await GoogleSearch(client, CONFIG).places_search("marketing in London")
+
+
+@pytest.mark.asyncio
+async def test_places_access_denied_mentions_billing_and_new_api():
+    fake = FakeGoogle(places_error=places_access_denied_response())
+    async with await make_client(fake) as client:
+        with pytest.raises(SearchConfigError, match="Places API \\(New\\)"):
+            await GoogleSearch(client, CONFIG).places_search("marketing in London")
+
+
+@pytest.mark.asyncio
+async def test_discover_places_only_without_cse():
+    fake = FakeGoogle(places=[{
+        "displayName": {"text": "Acme"},
+        "websiteUri": "https://acme.com/contact",
+        "formattedAddress": "Toronto, Canada",
+    }])
+    config = GoogleConfig(api_key="", cse_id="", places_api_key="places-key")
+    spec = parse_query("Find marketing agencies in Canada")
+    async with await make_client(fake) as client:
+        discovery = await discover_websites(client, spec, config, limit=5, use_places=True)
+    assert [website.domain for website in discovery.websites] == ["acme.com"]
+    assert "google_places" in discovery.providers
+    assert not fake.cse_requests
+
+
+@pytest.mark.asyncio
+async def test_discover_cse_closure_raises_config_error():
+    fake = FakeGoogle(cse_error=cse_no_access_response())
+    spec = parse_query("Find marketing agencies in Canada")
+    async with await make_client(fake) as client:
+        with pytest.raises(SearchConfigError, match="closed to new customers"):
+            await discover_websites(client, spec, CONFIG, limit=5, use_places=False, max_cse_calls=1)
 
 
 @pytest.mark.asyncio
