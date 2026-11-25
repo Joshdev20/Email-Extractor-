@@ -136,7 +136,7 @@
       "exampleChips", "planPanel", "startButton", "startButtonLabel", "previewButton",
       "industryInput", "industryPreset", "countrySelect", "cityInput", "categorySelect",
       "targetEmails", "targetWebsites", "concurrencyRange", "concurrencyValue",
-      "maxPagesRange", "maxPagesValue", "usePlacesToggle",
+      "maxPagesRange", "maxPagesValue", "usePlacesToggle", "authInput",
       "progressSection", "progressStateBadge", "progressPercent", "cancelButton",
       "progressMessage", "progressBar", "progressBarWrap", "progressCurrentDomain",
       "progressDiscovered", "progressCrawled", "progressUnique", "progressDuplicates",
@@ -379,7 +379,45 @@
     }
   }
 
-  function readSettings() {
+  function parseSiteAuth(value) {
+    const entries = [];
+    const seen = new Set();
+    String(value || "").split(/\r?\n/).forEach((raw) => {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) return;
+      const separator = line.indexOf("|");
+      if (separator < 0) {
+        throw new Error("Each authenticated site needs the format: domain | Authorization: ... or Cookie: ...");
+      }
+      const domain = line.slice(0, separator).trim().toLowerCase();
+      const header = line.slice(separator + 1).trim();
+      const colon = header.indexOf(":");
+      if (!domain || colon < 0) {
+        throw new Error("Authenticated site lines need a domain and an Authorization or Cookie header.");
+      }
+      const name = header.slice(0, colon).trim().toLowerCase();
+      const headerValue = header.slice(colon + 1).trim();
+      if (!headerValue) {
+        throw new Error(`The credential for ${domain} is empty.`);
+      }
+      if (name !== "authorization" && name !== "cookie") {
+        throw new Error(`Unsupported header for ${domain}. Use Authorization or Cookie.`);
+      }
+      if (seen.has(domain)) {
+        throw new Error(`Duplicate authenticated site: ${domain}`);
+      }
+      seen.add(domain);
+      const entry = { domain };
+      entry[name === "authorization" ? "authorization" : "cookie"] = headerValue;
+      entries.push(entry);
+    });
+    if (entries.length > 20) {
+      throw new Error("At most 20 authenticated sites are allowed.");
+    }
+    return entries;
+  }
+
+  function readSettings({ includeAuth = true } = {}) {
     const numberOrNull = (value) => {
       if (value === null || String(value).trim() === "") return null;
       const parsed = Number(value);
@@ -396,7 +434,8 @@
       max_pages_per_domain: Number(el.maxPagesRange.value),
       timeout: 15.0,
       use_places: el.usePlacesToggle.checked,
-      respect_robots: true
+      respect_robots: true,
+      site_auth: includeAuth ? parseSiteAuth(el.authInput.value) : []
     };
   }
 
@@ -890,7 +929,7 @@
     try {
       const data = await api("/api/parse-query", {
         method: "POST",
-        body: JSON.stringify({ query, settings: readSettings(), max_results: 20, use_places: el.usePlacesToggle.checked })
+        body: JSON.stringify({ query, settings: readSettings({ includeAuth: false }), max_results: 20, use_places: el.usePlacesToggle.checked })
       });
       renderPlan(data.parsed);
     } catch (error) {

@@ -9,6 +9,7 @@ from backend.validator import (
     ExtractRequest,
     ExtractionSettings,
     SearchRequest,
+    SiteAuth,
 )
 
 
@@ -77,3 +78,18 @@ def test_crawl_request_validation():
         CrawlRequest(url="http://localhost/")
     with pytest.raises(ValidationError):
         CrawlRequest(url="https://example.com", max_pages=50)
+
+
+def test_site_auth_normalises_domain_and_builds_headers():
+    auth = SiteAuth(domain="https://Example.com/contact", authorization="Bearer abc", cookie="sid=1")
+    assert auth.domain == "example.com"
+    assert auth.headers == {"Authorization": "Bearer abc", "Cookie": "sid=1"}
+    settings = ExtractionSettings(site_auth=[auth])
+    assert settings.auth_header_map() == {"example.com": {"Authorization": "Bearer abc", "Cookie": "sid=1"}}
+
+
+def test_site_auth_rejects_missing_or_unsafe_credentials():
+    with pytest.raises(ValidationError):
+        SiteAuth(domain="example.com")
+    with pytest.raises(ValidationError):
+        SiteAuth(domain="example.com", cookie="sid=1\nInjected: yes")

@@ -150,3 +150,41 @@ def test_normalize_domain_input_valid(value, expected):
 def test_normalize_domain_input_invalid(value):
     with pytest.raises(ValueError):
         normalize_domain_input(value)
+
+
+@pytest.mark.asyncio
+async def test_safe_get_scopes_auth_to_configured_domain_on_redirect():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.host, request.headers.get("authorization"), request.headers.get("cookie")))
+        if request.url.host == "example.com":
+            return httpx.Response(302, headers={"location": "https://example.org/final"})
+        return httpx.Response(200, text="<html>final</html>", headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await safe_get(
+            client,
+            "https://example.com/",
+            auth_headers={"example.com": {"Authorization": "Bearer test", "Cookie": "sid=1"}},
+        )
+    assert "final" in result.text
+    assert seen[0] == ("example.com", "Bearer test", "sid=1")
+    assert seen[1] == ("example.org", None, None)
+
+
+@pytest.mark.asyncio
+async def test_safe_get_sends_auth_to_subdomain():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.host, request.headers.get("authorization")))
+        return httpx.Response(200, text="<html>ok</html>", headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await safe_get(
+            client,
+            "https://portal.example.com/",
+            auth_headers={"example.com": {"Authorization": "Bearer test"}},
+        )
+    assert seen == [("portal.example.com", "Bearer test")]

@@ -263,3 +263,69 @@ async def test_crawl_prioritises_buyer_and_seller_pages():
 
     assert {email.email for email in site.emails} == {"buyer@acme.org", "seller@acme.org"}
     assert all(email.source_url in {"https://example.com/buyers", "https://example.com/sellers"} for email in site.emails)
+
+
+@pytest.mark.asyncio
+async def test_crawler_sends_scoped_auth_to_authenticated_pages():
+    seen = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, request.headers.get("cookie")))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n", headers={"content-type": "text/plain"})
+        return httpx.Response(
+            200,
+            text='<p>sales@acme.org</p>',
+            headers={"content-type": "text/html"},
+        )
+
+    async with await make_client(handler) as client:
+        crawler = Crawler(
+            client,
+            CrawlConfig(
+                rate_limit_seconds=0,
+                max_pages_per_domain=1,
+                auth_headers={"example.com": {"Cookie": "session=secret"}},
+            ),
+        )
+        site = await crawler.crawl_site(CrawlTarget(url="https://example.com/private", domain="example.com"))
+
+    assert site.emails[0].email == "sales@acme.org"
+    assert ("/private", "session=secret") in seen
+
+
+@pytest.mark.asyncio
+async def test_crawl_uses_robots_sitemap_for_hidden_contact_pages():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(
+                200,
+                text="User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n",
+                headers={"content-type": "text/plain"},
+            )
+        if request.url.path == "/sitemap.xml":
+            return httpx.Response(
+                200,
+                text=(
+                    '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                    "<url><loc>https://example.com/contact-us</loc></url>"
+                    "</urlset>"
+                ),
+                headers={"content-type": "application/xml"},
+            )
+        if request.url.path == "/contact-us":
+            return httpx.Response(
+                200,
+                text="<p>sales@acme.org</p>",
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(200, text="<html>home</html>", headers={"content-type": "text/html"})
+
+    async with await make_client(handler) as client:
+        crawler = Crawler(client, CrawlConfig(rate_limit_seconds=0, max_pages_per_domain=2))
+        site = await crawler.crawl_site(CrawlTarget(url="https://example.com/", domain="example.com"))
+
+    assert site.pages_crawled == 2
+    assert [(email.email, email.source_url) for email in site.emails] == [
+        ("sales@acme.org", "https://example.com/contact-us")
+    ]

@@ -13,7 +13,7 @@ import re
 import socket
 import time
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Mapping
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -288,6 +288,21 @@ def _safe_text(value: str | None) -> str:
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", value or "")
 
 
+def _auth_headers_for(
+    url: str,
+    auth_headers: Mapping[str, Mapping[str, str]] | None,
+) -> dict[str, str]:
+    """Return credentials only for an exact host or one of its subdomains."""
+    if not auth_headers:
+        return {}
+    host = (urlsplit(url).hostname or "").lower().strip(".")
+    for domain, headers in auth_headers.items():
+        scope = domain.lower().strip(".")
+        if host == scope or host.endswith(f".{scope}"):
+            return dict(headers)
+    return {}
+
+
 async def safe_get(
     client: httpx.AsyncClient,
     url: str,
@@ -296,24 +311,32 @@ async def safe_get(
     max_bytes: int = MAX_RESPONSE_BYTES,
     allowed_content_types: Iterable[str] = ("text/html", "application/xhtml+xml"),
     max_redirects: int = MAX_REDIRECTS,
+    auth_headers: Mapping[str, Mapping[str, str]] | None = None,
 ) -> FetchResult:
-    """Fetch a public web page with SSRF, redirect, size and content checks."""
+    """Fetch a page with SSRF, redirect, size and content checks.
+
+    Optional site credentials are scoped to their configured host. They are
+    recalculated for every redirect, so a redirect to another domain cannot
+    receive the original site's credentials.
+    """
     current = await validate_url(url)
     allowed = {item.lower() for item in allowed_content_types}
     redirects = 0
 
     for _ in range(max_redirects + 1):
         try:
+            request_headers = {
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+                "Accept-Language": "en;q=0.9",
+            }
+            request_headers.update(_auth_headers_for(current, auth_headers))
             async with client.stream(
                 "GET",
                 current,
                 follow_redirects=False,
                 timeout=timeout,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
-                    "Accept-Language": "en;q=0.9",
-                },
+                headers=request_headers,
             ) as response:
                 if response.status_code in REDIRECT_CODES:
                     location = response.headers.get("location")

@@ -379,3 +379,45 @@ def test_rate_limit_middleware_blocks_extraction_burst():
     second = asyncio.run(run_once())
     assert first[0]["status"] == 200
     assert second[0]["status"] == 429
+
+
+def test_crawl_endpoint_uses_auth_without_leaking_it(api_client, monkeypatch):
+    seen = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n", headers={"content-type": "text/plain"})
+        seen.append((request.url.host, request.headers.get("authorization"), request.headers.get("cookie")))
+        return httpx.Response(
+            200,
+            text="<p>sales@acme.org</p>",
+            headers={"content-type": "text/html"},
+        )
+
+    async def keep_client(self):
+        return None
+
+    monkeypatch.setattr(main.JobManager, "start", keep_client)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            previous = main.manager.client
+            main.manager.client = client
+            try:
+                return api_client.post(
+                    "/api/crawl",
+                    json={
+                        "url": "https://example.com/",
+                        "max_pages": 1,
+                        "site_auth": [
+                            {"domain": "example.com", "authorization": "Bearer secret-token"}
+                        ],
+                    },
+                )
+            finally:
+                main.manager.client = previous
+
+    response = asyncio.run(run())
+    assert response.status_code == 200
+    assert ("example.com", "Bearer secret-token", None) in seen
+    assert "secret-token" not in response.text

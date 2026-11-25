@@ -477,6 +477,7 @@ async def _crawl_targets(job: Job, targets: list[CrawlTarget], settings: Extract
         timeout=settings.timeout,
         respect_robots=True,
         rate_limit_seconds=CRAWL_RATE_LIMIT_SECONDS,
+        auth_headers=settings.auth_header_map(),
     )
 
     async def on_progress(update: dict[str, Any]) -> None:
@@ -983,6 +984,7 @@ async def crawl_single(payload: CrawlRequest) -> dict[str, Any]:
         timeout=20.0,
         respect_robots=True,
         rate_limit_seconds=CRAWL_RATE_LIMIT_SECONDS,
+        auth_headers={entry.domain: entry.headers for entry in payload.site_auth},
     )
     crawler = Crawler(manager.client, config)
     domain = registrable_domain(normalize_domain_input(payload.url)) or ""

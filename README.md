@@ -32,9 +32,10 @@ storage**. Active jobs live in Python memory. Browser history lives in
   cancellation. It starts at the homepage, prioritises contact, about, team,
   buyer, and seller pages, then follows useful links from those pages up to the
   configured page limit (15 on the frontend).
-- Login-protected pages are skipped. The crawler detects `401` and `403`
-  responses, records that authentication was required, and never bypasses
-  logins, CAPTCHAs, paywalls, or other access controls.
+- Login-protected pages are skipped unless you supply scoped site credentials
+  for a site you are authorized to crawl. The crawler records `401` and `403`
+  responses as `auth_required` and never bypasses CAPTCHAs, paywalls, or other
+  access controls.
 - Email extraction from visible text, `mailto:` links, HTML attributes,
   JSON-LD, and visibly obfuscated forms such as `name [at] domain [dot] com`.
 - Deduplication, syntax validation, domain association, source URL, company,
@@ -301,7 +302,12 @@ the interpreted plan so users can inspect it before crawling.
    - fetch and honour `robots.txt` (a 401/403 disallow blocks the site; a 5xx
      fetch failure fails open);
    - fetch the start page and prioritise `/contact`, `/contact-us`, `/about`,
-     `/about-us`, `/team`, `/our-team`, `/company`, `/support`, `/sales`;
+     `/about-us`, `/team`, `/our-team`, `/company`, `/support`, `/sales`,
+     plus buyer, seller, procurement, sourcing, wholesale, supplier, vendor,
+     manufacturer, distributor, and trade pages;
+   - use `robots.txt` `Sitemap:` entries to discover useful pages that are not
+     linked from the homepage;
+   - follow useful links from already crawled pages up to the page limit;
    - stay on the same registrable domain;
    - cap pages per domain and requests per second;
    - use timeouts, retries with backoff, and a maximum response size.
@@ -316,14 +322,36 @@ the interpreted plan so users can inspect it before crawling.
 ### Crawling limits and cancellation
 
 `ExtractionSettings` supports `concurrency` (1–10), `max_pages_per_domain`
-(1–15; the UI slider exposes 1–12), `target_emails` (1–1000), `target_websites`
+(1–15; the UI slider exposes 1–15), `target_emails` (1–1000), `target_websites`
 (1–200), request timeout,
-robots toggle (must remain enabled), Places toggle, and email category filter.
+robots toggle (must remain enabled), Places toggle, email category filter, and
+optional per-domain site credentials.
 `POST /api/cancel` sets a per-job event and cancels the task. Jobs have
 independent state, so concurrent jobs do not share result sets.
 
-LeadScope does not bypass CAPTCHAs, authentication, paywalls, or other access
-controls, and does not crawl unrelated pages.
+### Authenticated crawling
+
+Use the **Authenticated crawling** panel for sites you own or are authorized to
+crawl. Supply one line per site:
+
+```text
+example.com | Cookie: session=...
+portal.example.com | Authorization: Bearer ...
+```
+
+- Credentials are scoped to the exact host and its subdomains.
+- Credentials are kept only in server/browser memory for the active job. They
+  are not written to browser preferences, extraction history, logs, exports, or
+  API responses.
+- On a redirect, credentials are recalculated for the destination host. A
+  redirect to another domain does not receive the original site's credentials.
+- `robots.txt` remains enforced, and CAPTCHAs, paywalls, and other access
+  controls are not bypassed.
+- The API accepts the same data as `settings.site_auth`, for example:
+  `{"domain":"example.com","cookie":"session=..."}`.
+
+LeadScope does not bypass CAPTCHAs, paywalls, or access controls without
+credentials you supply for the target site, and does not crawl unrelated pages.
 
 ---
 
@@ -418,7 +446,8 @@ reports the error; CSV/TXT/JSON still work.
 ## No-database design
 
 - No SQL, NoSQL, document, or serverless database is used or required.
-- No user accounts, sessions, cookies for identity, or authentication.
+- No user accounts, application sessions, identity cookies, or login system.
+  Optional target-site credentials are per-job request data, not app accounts.
 - Active jobs live in a Python dictionary in one process. They expire after
   `JOB_TTL_SECONDS` and disappear on restart.
 - The server never writes extracted emails to disk.
@@ -477,7 +506,7 @@ Run the JavaScript export tests:
 node --test tests/export.test.js
 ```
 
-Current results in this environment: **106 Python tests passed** and **6 Node
+Current results in this environment: **124 Python tests passed** and **6 Node
 tests passed**.
 
 Coverage includes:
@@ -485,8 +514,9 @@ Coverage includes:
 - natural-language parsing examples and overrides
 - Google CSE/Places request parameters, Places pagination and query variants,
   deduplication, ranking, quota and configuration errors
-- crawling fixtures, robots allow/disallow/failure, link priority, page caps,
-  source attribution, deduplication, cancellation, and bulk isolation
+- crawling fixtures, robots allow/disallow/failure, sitemap discovery, link
+  priority, page caps, source attribution, deduplication, cancellation, bulk
+  isolation, scoped authenticated headers, and redirect credential stripping
 - email extraction methods (text, mailto, attributes, JSON-LD, obfuscation),
   placeholder/asset rejection, syntax checks, and all categories
 - SSRF blocks (localhost, private IPs, metadata endpoints, credentials,

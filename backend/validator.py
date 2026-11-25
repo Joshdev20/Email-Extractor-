@@ -57,6 +57,52 @@ def _clean_urls(values: list[str]) -> list[str]:
     return cleaned
 
 
+class SiteAuth(BaseModel):
+    """Optional, domain-scoped credentials supplied by the caller.
+
+    Credentials stay in process memory for the active job. They are never
+    written to browser preferences, export files, logs, or job snapshots.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    domain: Annotated[str, Field(min_length=3, max_length=253)]
+    authorization: Annotated[str | None, Field(default=None, max_length=4096)] = None
+    cookie: Annotated[str | None, Field(default=None, max_length=8192)] = None
+
+    @field_validator("domain")
+    @classmethod
+    def clean_domain(cls, value: str) -> str:
+        return normalize_domain_input(value)
+
+    @field_validator("authorization", "cookie")
+    @classmethod
+    def clean_header_value(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if any(char in cleaned for char in ("\r", "\n", "\x00")):
+            raise ValueError("Credential headers cannot contain line breaks")
+        return cleaned
+
+    @model_validator(mode="after")
+    def require_credential(self) -> "SiteAuth":
+        if not self.authorization and not self.cookie:
+            raise ValueError("Provide an Authorization header, a Cookie header, or both")
+        return self
+
+    @property
+    def headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self.authorization:
+            headers["Authorization"] = self.authorization
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+        return headers
+
+
 class ExtractionSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -71,6 +117,7 @@ class ExtractionSettings(BaseModel):
     timeout: Annotated[float, Field(default=15.0, ge=5.0, le=60.0)] = 15.0
     use_places: bool = True
     respect_robots: bool = True
+    site_auth: Annotated[list[SiteAuth], Field(default_factory=list, max_length=20)] = Field(default_factory=list)
 
     @field_validator("country", "industry", "city", mode="before")
     @classmethod
@@ -96,6 +143,19 @@ class ExtractionSettings(BaseModel):
         if not value:
             raise ValueError("robots.txt compliance cannot be disabled")
         return True
+
+    @field_validator("site_auth")
+    @classmethod
+    def unique_site_auth(cls, value: list[SiteAuth]) -> list[SiteAuth]:
+        seen: set[str] = set()
+        for entry in value:
+            if entry.domain in seen:
+                raise ValueError(f"Duplicate site_auth entry for {entry.domain}")
+            seen.add(entry.domain)
+        return value
+
+    def auth_header_map(self) -> dict[str, dict[str, str]]:
+        return {entry.domain: entry.headers for entry in self.site_auth}
 
 
 class SearchRequest(BaseModel):
@@ -177,6 +237,7 @@ class CrawlRequest(BaseModel):
 
     url: Annotated[str, Field(min_length=4, max_length=2048)]
     max_pages: Annotated[int, Field(default=6, ge=1, le=10)] = 6
+    site_auth: Annotated[list[SiteAuth], Field(default_factory=list, max_length=20)] = Field(default_factory=list)
 
     @field_validator("url")
     @classmethod

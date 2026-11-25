@@ -81,6 +81,7 @@ class CrawlConfig:
     respect_robots: bool = True
     rate_limit_seconds: float = 0.75
     retries: int = 2
+    auth_headers: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -207,6 +208,7 @@ class Crawler:
                     max_bytes=self.config.max_response_bytes,
                     allowed_content_types=content_types
                     or ("text/html", "application/xhtml+xml"),
+                    auth_headers=self.config.auth_headers,
                 )
             except security.FetchError as exc:
                 last_error = exc
@@ -250,6 +252,46 @@ class Crawler:
         if parser is None:
             return True
         return parser.can_fetch(security.USER_AGENT, url)
+
+    async def _sitemap_links(self, domain: str, site_url: str) -> list[_DiscoveredLink]:
+        """Use robots.txt Sitemap directives to find useful pages not linked in HTML."""
+        parser = await self._robots_for(site_url)
+        if parser is None:
+            return []
+        found: dict[str, int] = {}
+        for sitemap_url in (parser.site_maps() or [])[:3]:
+            host = urlsplit(sitemap_url).hostname or ""
+            if registrable_domain(host) != domain:
+                continue
+            if not await self._allowed(sitemap_url):
+                continue
+            try:
+                result = await self._fetch(
+                    sitemap_url,
+                    content_types=("application/xml", "text/xml", "text/plain"),
+                )
+            except (security.FetchError, security.UnsafeURLError):
+                continue
+            if "<urlset" not in result.text.lower() and "<sitemapindex" not in result.text.lower():
+                continue
+            soup = BeautifulSoup(result.text, "xml")
+            for loc in soup.find_all("loc"):
+                absolute = urljoin(sitemap_url, loc.get_text(strip=True))
+                parts = urlsplit(absolute)
+                if parts.scheme not in ("http", "https") or not parts.hostname:
+                    continue
+                if registrable_domain(parts.hostname) != domain:
+                    continue
+                path = parts.path or "/"
+                score = _score_link(path, "")
+                if score <= 0:
+                    continue
+                clean = urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+                found[clean] = max(found.get(clean, 0), score)
+        return [
+            _DiscoveredLink(url=url, score=score)
+            for url, score in sorted(found.items(), key=lambda item: (-item[1], item[0]))
+        ]
 
     def _discover_links(self, html: str, page_url: str, domain: str) -> list[_DiscoveredLink]:
         soup = BeautifulSoup(html, "lxml")
@@ -365,6 +407,8 @@ class Crawler:
 
         pending = self._discover_links(home.text, home.url, domain)
         remaining = max(0, self.config.max_pages_per_domain - 1)
+        if remaining > 0:
+            pending.extend(await self._sitemap_links(domain, home.url))
         seen = {home.url}
         page_results: list[tuple[int, security.FetchResult, list[ExtractedEmail], str, str, int]] = []
         semaphore = asyncio.Semaphore(self.config.per_domain_concurrency)
