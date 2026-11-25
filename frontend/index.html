@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1a2a">
+  <meta name="description" content="Discover publicly listed business email addresses with Google-powered search and a polite Python crawler. No database. No accounts.">
+  <title>LeadScope | Business Email Extractor &amp; Lead Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 950: '#07121d', 900: '#0a1a2a', 800: '#0f2639', 700: '#153247', 600: '#1d425c' },
+            accent: { 400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857' }
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'] },
+          boxShadow: {
+            card: '0 18px 50px -24px rgba(8, 20, 32, 0.35)',
+            lift: '0 24px 70px -28px rgba(8, 20, 32, 0.45)'
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+  <a href="#workspace" class="skip-link">Skip to extraction workspace</a>
+
+  <div class="min-h-screen flex flex-col">
+    <header class="site-header">
+      <div class="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <a href="#top" class="flex min-w-0 items-center gap-3" aria-label="LeadScope home">
+          <span class="brand-mark" aria-hidden="true">
+            <i class="fa-solid fa-envelope-open-text"></i>
+          </span>
+          <span class="min-w-0">
+            <span class="block truncate text-[15px] font-extrabold tracking-tight text-navy-900">LeadScope</span>
+            <span class="brand-tagline block truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Business email intelligence</span>
+          </span>
+        </a>
+
+        <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
+          <a class="nav-link" href="#workspace">Workspace</a>
+          <a class="nav-link" href="#results">Results</a>
+          <a class="nav-link" href="#history">History</a>
+          <a class="nav-link" href="#setup">Google setup</a>
+          <a class="nav-link" href="/api/docs" target="_blank" rel="noopener">API docs</a>
+        </nav>
+
+        <div class="flex items-center gap-2">
+          <span class="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 sm:inline-flex">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+            No database
+          </span>
+          <button id="mobileMenuButton" type="button" class="icon-button md:hidden" aria-expanded="false" aria-controls="mobileMenu" aria-label="Open navigation menu">
+            <i class="fa-solid fa-bars" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobileMenu" class="hidden border-t border-slate-200 bg-white px-4 py-3 md:hidden">
+        <nav class="grid gap-1" aria-label="Mobile">
+          <a class="mobile-nav-link" href="#workspace">Workspace</a>
+          <a class="mobile-nav-link" href="#results">Results</a>
+          <a class="mobile-nav-link" href="#history">History</a>
+          <a class="mobile-nav-link" href="#setup">Google setup</a>
+          <a class="mobile-nav-link" href="/api/docs" target="_blank" rel="noopener">API docs</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top" class="flex-1">
+      <section class="hero" aria-labelledby="heroTitle">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <div class="relative mx-auto w-full max-w-7xl px-4 pb-24 pt-12 sm:px-6 sm:pt-16 lg:px-8">
+          <div class="max-w-3xl">
+            <span class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-200 backdrop-blur">
+              <i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i>
+              Google-powered discovery
+            </span>
+            <h1 id="heroTitle" class="mt-5 text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
+              Find publicly listed business emails.<br class="hidden sm:block">
+              <span class="text-emerald-300">Build your next lead list.</span>
+            </h1>
+            <p class="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+              Describe the companies you need in plain language. LeadScope discovers official websites with Google, crawls their public contact pages with Python, and returns categorised, source-attributed email addresses to your browser.
+            </p>
+            <div class="mt-6 flex flex-wrap gap-2 text-[11px] font-semibold text-slate-200">
+              <span class="hero-chip"><i class="fa-solid fa-bolt" aria-hidden="true"></i> FastAPI backend</span>
+              <span class="hero-chip"><i class="fa-solid fa-spider" aria-hidden="true"></i> Polite crawler</span>
+              <span class="hero-chip"><i class="fa-solid fa-lock" aria-hidden="true"></i> Keys stay server-side</span>
+              <span class="hero-chip"><i class="fa-solid fa-hard-drive" aria-hidden="true"></i> Browser-only storage</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="relative z-10 mx-auto -mt-14 w-full max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+        <div id="setupBanner" class="hidden notice-banner" role="status">
+          <div class="flex items-start gap-3">
+            <span class="notice-icon"><i class="fa-solid fa-key" aria-hidden="true"></i></span>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-bold text-navy-900">Google search is not configured yet</p>
+              <p class="mt-1 text-xs leading-5 text-slate-600">
+                Natural-language discovery needs a Google API key and Custom Search Engine ID. Manual domain extraction works without Google. Add credentials on the server, then reload this page.
+              </p>
+            </div>
+            <a href="#setup" class="btn-secondary shrink-0 text-xs">Setup guide</a>
+          </div>
+        </div>
+
+        <section id="workspace" class="grid gap-6 lg:grid-cols-12" aria-labelledby="workspaceTitle">
+          <div class="card lg:col-span-7">
+            <div class="card-header">
+              <div>
+                <p class="step-label">Step 1</p>
+                <h2 id="workspaceTitle" class="card-title">Describe what you need</h2>
+              </div>
+              <span class="badge badge-emerald"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Natural language</span>
+            </div>
+
+            <div class="mode-tabs" role="tablist" aria-label="Input mode">
+              <button type="button" class="mode-tab is-active" data-mode="nl" role="tab" aria-selected="true">
+                <i class="fa-solid fa-comment-dots" aria-hidden="true"></i> Describe
+              </button>
+              <button type="button" class="mode-tab" data-mode="domains" role="tab" aria-selected="false">
+                <i class="fa-solid fa-list-ul" aria-hidden="true"></i> Domains
+              </button>
+              <button type="button" class="mode-tab" data-mode="single" role="tab" aria-selected="false">
+                <i class="fa-solid fa-link" aria-hidden="true"></i> Single URL
+              </button>
+            </div>
+
+            <div id="panelNl" class="mode-panel">
+              <label for="queryInput" class="field-label">What are you looking for?</label>
+              <textarea id="queryInput" class="text-area" rows="5" maxlength="1000" placeholder="Find 500 publicly listed business email addresses belonging to real estate companies in the United Kingdom."></textarea>
+              <div class="mt-3 flex flex-wrap gap-2" id="exampleChips">
+                <button type="button" class="example-chip" data-example="Find 500 publicly listed business email addresses belonging to real estate companies in the United Kingdom.">UK real estate, 500 emails</button>
+                <button type="button" class="example-chip" data-example="Find marketing agencies in Canada and extract their business emails.">Canada marketing agencies</button>
+                <button type="button" class="example-chip" data-example="Find web development companies in the United States.">US web development</button>
+                <button type="button" class="example-chip" data-example="Find customer support emails from e-commerce companies.">E-commerce support</button>
+                <button type="button" class="example-chip" data-example="Find recruitment agencies in London.">London recruitment</button>
+                <button type="button" class="example-chip" data-example="Find publicly listed business contacts for software companies in Germany.">Germany software</button>
+              </div>
+            </div>
+
+            <div id="panelDomains" class="mode-panel hidden">
+              <label for="domainsInput" class="field-label">Paste domains or URLs</label>
+              <textarea id="domainsInput" class="text-area font-mono text-[13px]" rows="5" placeholder="example.com&#10;https://acme.co.uk&#10;another-company.com"></textarea>
+              <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label class="btn-secondary cursor-pointer justify-center" for="fileInput">
+                  <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i>
+                  Upload TXT file
+                </label>
+                <input id="fileInput" type="file" accept=".txt,text/plain" class="sr-only">
+                <span id="domainCount" class="text-xs font-semibold text-slate-500">0 websites queued</span>
+              </div>
+              <p class="field-hint">One domain or URL per line. Duplicate domains are removed automatically.</p>
+            </div>
+
+            <div id="panelSingle" class="mode-panel hidden">
+              <label for="urlInput" class="field-label">Website URL</label>
+              <input id="urlInput" type="url" class="text-input" placeholder="https://example.com" autocomplete="off" spellcheck="false">
+              <p class="field-hint">The crawler will visit the homepage, then prioritised contact, about and team pages.</p>
+            </div>
+
+            <div id="planPanel" class="hidden plan-panel" aria-live="polite"></div>
+
+            <div class="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button id="startButton" type="button" class="btn-primary flex-1 justify-center">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <span id="startButtonLabel">Start extraction</span>
+              </button>
+              <button id="previewButton" type="button" class="btn-secondary justify-center">
+                <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                Preview plan
+              </button>
+            </div>
+
+            <p class="mt-4 flex items-start gap-2 text-[11px] leading-5 text-slate-500">
+              <i class="fa-solid fa-circle-info mt-0.5 text-slate-400" aria-hidden="true"></i>
+              <span>Only publicly published business contact details are collected. LeadScope respects robots.txt and never bypasses logins, paywalls or CAPTCHAs. Syntax validation does not guarantee deliverability.</span>
+            </p>
+          </div>
+
+          <aside class="card lg:col-span-5" aria-labelledby="settingsTitle">
+            <div class="card-header">
+              <div>
+                <p class="step-label">Step 2</p>
+                <h2 id="settingsTitle" class="card-title">Extraction settings</h2>
+              </div>
+              <span class="badge badge-navy"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Optional</span>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label for="industryInput" class="field-label">Industry</label>
+                <input id="industryInput" type="text" class="text-input" maxlength="80" placeholder="e.g. real estate">
+              </div>
+              <div>
+                <label for="countrySelect" class="field-label">Country</label>
+                <select id="countrySelect" class="select-input">
+                  <option value="">Auto-detect</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="United States">United States</option>
+                  <option value="Canada">Canada</option>
+                  <option value="Australia">Australia</option>
+                  <option value="Germany">Germany</option>
+                  <option value="France">France</option>
+                  <option value="Spain">Spain</option>
+                  <option value="Italy">Italy</option>
+                  <option value="Netherlands">Netherlands</option>
+                  <option value="Ireland">Ireland</option>
+                  <option value="India">India</option>
+                  <option value="Singapore">Singapore</option>
+                  <option value="United Arab Emirates">United Arab Emirates</option>
+                  <option value="South Africa">South Africa</option>
+                  <option value="New Zealand">New Zealand</option>
+                  <option value="Brazil">Brazil</option>
+                  <option value="Mexico">Mexico</option>
+                  <option value="Japan">Japan</option>
+                  <option value="Switzerland">Switzerland</option>
+                  <option value="Sweden">Sweden</option>
+                  <option value="Poland">Poland</option>
+                </select>
+              </div>
+              <div>
+                <label for="cityInput" class="field-label">City</label>
+                <input id="cityInput" type="text" class="text-input" maxlength="80" placeholder="e.g. London">
+              </div>
+              <div>
+                <label for="categorySelect" class="field-label">Email category</label>
+                <select id="categorySelect" class="select-input">
+                  <option value="">Any category</option>
+                  <option value="general">General</option>
+                  <option value="sales">Sales</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="support">Support</option>
+                  <option value="careers">Careers</option>
+                  <option value="press">Press</option>
+                  <option value="owner">Business owner</option>
+                </select>
+              </div>
+              <div>
+                <label for="targetEmails" class="field-label">Target emails</label>
+                <input id="targetEmails" type="number" class="text-input" min="1" max="1000" placeholder="Auto (50)">
+              </div>
+              <div>
+                <label for="targetWebsites" class="field-label">Target websites</label>
+                <input id="targetWebsites" type="number" class="text-input" min="1" max="200" placeholder="Auto">
+              </div>
+            </div>
+
+            <details class="advanced-block">
+              <summary class="advanced-summary">
+                <span><i class="fa-solid fa-gears mr-2 text-slate-400" aria-hidden="true"></i>Advanced crawling</span>
+                <i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i>
+              </summary>
+              <div class="mt-4 grid gap-4">
+                <div>
+                  <div class="flex items-center justify-between">
+                    <label for="concurrencyRange" class="field-label mb-0">Concurrent websites</label>
+                    <span id="concurrencyValue" class="range-value">5</span>
+                  </div>
+                  <input id="concurrencyRange" type="range" min="1" max="10" value="5" class="range-input">
+                </div>
+                <div>
+                  <div class="flex items-center justify-between">
+                    <label for="maxPagesRange" class="field-label mb-0">Max pages per website</label>
+                    <span id="maxPagesValue" class="range-value">6</span>
+                  </div>
+                  <input id="maxPagesRange" type="range" min="1" max="12" value="6" class="range-input">
+                </div>
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div>
+                    <p class="text-xs font-bold text-slate-700">Use Google Places</p>
+                    <p class="text-[11px] text-slate-500">Adds business websites when configured.</p>
+                  </div>
+                  <label class="toggle">
+                    <input id="usePlacesToggle" type="checkbox" checked>
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span class="sr-only">Use Google Places</span>
+                  </label>
+                </div>
+                <div class="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] font-semibold text-emerald-800">
+                  <i class="fa-solid fa-robot" aria-hidden="true"></i>
+                  robots.txt is always respected. Request rate limits apply per domain.
+                </div>
+              </div>
+            </details>
+          </aside>
+        </section>
+
+        <section id="progressSection" class="hidden mt-6" aria-labelledby="progressTitle" aria-live="polite">
+          <div class="card overflow-hidden">
+            <div class="card-header">
+              <div class="min-w-0">
+                <p class="step-label">Live extraction</p>
+                <h2 id="progressTitle" class="card-title flex items-center gap-2">
+                  <span id="progressStateBadge" class="badge badge-emerald"><i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> Running</span>
+                  <span class="truncate text-sm font-semibold text-slate-500" id="progressPercent">0%</span>
+                </h2>
+              </div>
+              <button id="cancelButton" type="button" class="btn-danger text-xs">
+                <i class="fa-solid fa-stop" aria-hidden="true"></i> Cancel
+              </button>
+            </div>
+
+            <p id="progressMessage" class="text-sm font-semibold text-slate-700">Preparing extraction</p>
+            <div class="progress-track mt-3" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBarWrap">
+              <div id="progressBar" class="progress-bar" style="width:0%"></div>
+            </div>
+            <p class="mt-2 truncate text-xs text-slate-500" id="progressCurrentDomain">Waiting for the first website</p>
+
+            <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div class="mini-stat"><span>Discovered</span><strong id="progressDiscovered">0</strong></div>
+              <div class="mini-stat"><span>Crawled</span><strong id="progressCrawled">0</strong></div>
+              <div class="mini-stat"><span>Unique emails</span><strong id="progressUnique">0</strong></div>
+              <div class="mini-stat"><span>Duplicates removed</span><strong id="progressDuplicates">0</strong></div>
+            </div>
+
+            <div id="progressWebsites" class="mt-4 flex flex-wrap gap-2"></div>
+            <div id="progressIssues" class="mt-4 hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900"></div>
+          </div>
+        </section>
+
+        <section id="results" class="hidden mt-6" aria-labelledby="resultsTitle">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="step-label">Extraction dashboard</p>
+              <h2 id="resultsTitle" class="text-xl font-extrabold tracking-tight text-navy-900 sm:text-2xl">Results</h2>
+              <p class="mt-1 text-xs text-slate-500"><span id="resultsCountLabel">0</span> records in this session. Stored in your browser only.</p>
+            </div>
+            <button id="clearResultsButton" type="button" class="btn-ghost text-xs">
+              <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Clear results
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <div class="stat-card"><span class="stat-icon stat-navy"><i class="fa-solid fa-globe" aria-hidden="true"></i></span><span class="stat-label">Websites found</span><strong class="stat-value" id="statDiscovered">0</strong></div>
+            <div class="stat-card"><span class="stat-icon stat-emerald"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span><span class="stat-label">Crawled</span><strong class="stat-value" id="statCrawled">0</strong></div>
+            <div class="stat-card"><span class="stat-icon stat-rose"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><span class="stat-label">Failed</span><strong class="stat-value" id="statFailed">0</strong></div>
+            <div class="stat-card"><span class="stat-icon stat-sky"><i class="fa-solid fa-at" aria-hidden="true"></i></span><span class="stat-label">Emails found</span><strong class="stat-value" id="statEmails">0</strong></div>
+            <div class="stat-card"><span class="stat-icon stat-emerald"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i></span><span class="stat-label">Unique emails</span><strong class="stat-value" id="statUnique">0</strong></div>
+            <div class="stat-card"><span class="stat-icon stat-amber"><i class="fa-solid fa-clone" aria-hidden="true"></i></span><span class="stat-label">Duplicates removed</span><strong class="stat-value" id="statDuplicates">0</strong></div>
+          </div>
+
+          <div class="card mt-4">
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input id="resultSearch" type="search" class="search-input" placeholder="Search emails, companies or domains" aria-label="Search results">
+              </div>
+              <select id="categoryFilter" class="select-input toolbar-select" aria-label="Filter by category">
+                <option value="">All categories</option>
+                <option value="general">General</option>
+                <option value="sales">Sales</option>
+                <option value="marketing">Marketing</option>
+                <option value="support">Support</option>
+                <option value="careers">Careers</option>
+                <option value="press">Press</option>
+                <option value="owner">Business owner</option>
+                <option value="other">Other</option>
+              </select>
+              <select id="domainFilter" class="select-input toolbar-select" aria-label="Filter by domain">
+                <option value="">All domains</option>
+              </select>
+              <select id="sortSelect" class="select-input toolbar-select" aria-label="Sort results">
+                <option value="email-asc">Email A-Z</option>
+                <option value="email-desc">Email Z-A</option>
+                <option value="newest">Newest first</option>
+                <option value="category">Category</option>
+              </select>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <label class="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+                <input id="selectAll" type="checkbox" class="checkbox">
+                Select all
+              </label>
+              <span id="selectedCount" class="text-xs font-semibold text-slate-500">0 selected</span>
+              <span class="hidden h-5 w-px bg-slate-200 sm:block"></span>
+              <button id="copySelectedButton" type="button" class="btn-secondary text-xs"><i class="fa-regular fa-copy" aria-hidden="true"></i> Copy selected</button>
+              <button id="copyAllButton" type="button" class="btn-secondary text-xs"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copy all</button>
+              <div class="relative" id="exportWrap">
+                <button id="exportButton" type="button" class="btn-primary text-xs" aria-expanded="false" aria-haspopup="true">
+                  <i class="fa-solid fa-download" aria-hidden="true"></i> Export
+                  <i class="fa-solid fa-chevron-down text-[10px]" aria-hidden="true"></i>
+                </button>
+                <div id="exportMenu" class="export-menu hidden" role="menu">
+                  <button type="button" data-format="csv" role="menuitem"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> CSV spreadsheet</button>
+                  <button type="button" data-format="xlsx" role="menuitem"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Excel workbook</button>
+                  <button type="button" data-format="json" role="menuitem"><i class="fa-solid fa-file-code" aria-hidden="true"></i> JSON data</button>
+                  <button type="button" data-format="txt" role="menuitem"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Plain text</button>
+                </div>
+              </div>
+              <span id="selectionHint" class="text-[11px] text-slate-500">Export uses selected rows, or all filtered rows.</span>
+            </div>
+
+            <div id="resultsTableWrap" class="mt-4 overflow-hidden rounded-xl border border-slate-200">
+              <div class="max-h-[620px] overflow-auto">
+                <table class="results-table">
+                  <thead>
+                    <tr>
+                      <th class="w-10"><span class="sr-only">Select</span></th>
+                      <th>Email</th>
+                      <th>Company</th>
+                      <th>Domain</th>
+                      <th>Category</th>
+                      <th>Country</th>
+                      <th>Source</th>
+                      <th>Extracted</th>
+                      <th>Status</th>
+                      <th class="w-10"><span class="sr-only">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="resultsCards" class="mt-4 grid gap-3 md:hidden"></div>
+
+            <div id="resultsEmpty" class="hidden py-14 text-center">
+              <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span>
+              <p class="mt-3 text-sm font-bold text-slate-700">No matching emails</p>
+              <p class="mt-1 text-xs text-slate-500">Adjust your filters or run a broader extraction.</p>
+            </div>
+
+            <div class="mt-4 flex justify-center">
+              <button id="loadMoreButton" type="button" class="btn-secondary hidden text-xs"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i> Load more</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="history" class="mt-10" aria-labelledby="historyTitle">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p class="step-label">Browser storage</p>
+              <h2 id="historyTitle" class="text-xl font-extrabold tracking-tight text-navy-900">Local extraction history</h2>
+              <p class="mt-1 text-xs text-slate-500">Saved in this browser only. Nothing is retained on the server.</p>
+            </div>
+            <button id="clearHistoryButton" type="button" class="btn-ghost text-xs"><i class="fa-solid fa-broom" aria-hidden="true"></i> Erase local history</button>
+          </div>
+          <div id="historyList" class="grid gap-3 lg:grid-cols-2"></div>
+          <div id="historyEmpty" class="card py-10 text-center">
+            <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><i class="fa-regular fa-clock" aria-hidden="true"></i></span>
+            <p class="mt-3 text-sm font-bold text-slate-700">No local history yet</p>
+            <p class="mt-1 text-xs text-slate-500">Completed extractions appear here for quick restore.</p>
+          </div>
+        </section>
+
+        <section id="setup" class="mt-10" aria-labelledby="setupTitle">
+          <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card">
+            <div class="bg-navy-900 px-5 py-6 text-white sm:px-7">
+              <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300">Configuration</p>
+              <h2 id="setupTitle" class="mt-1 text-xl font-extrabold tracking-tight">Connect Google search</h2>
+              <p class="mt-2 max-w-3xl text-xs leading-5 text-slate-300">
+                LeadScope uses Google's supported APIs only. It never scrapes Google result pages and never exposes API keys to the browser.
+              </p>
+            </div>
+            <div class="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-2">
+              <div class="space-y-4">
+                <div class="setup-step">
+                  <span class="setup-number">1</span>
+                  <div>
+                    <p class="text-sm font-bold text-navy-900">Enable the APIs</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">In Google Cloud Console, enable the Custom Search JSON API and, optionally, Places API (New). Billing must be active for Places.</p>
+                  </div>
+                </div>
+                <div class="setup-step">
+                  <span class="setup-number">2</span>
+                  <div>
+                    <p class="text-sm font-bold text-navy-900">Create a Programmable Search Engine</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">Create an engine that searches the entire web, then copy its Search engine ID (cx). Create an API key restricted to the enabled APIs.</p>
+                  </div>
+                </div>
+                <div class="setup-step">
+                  <span class="setup-number">3</span>
+                  <div>
+                    <p class="text-sm font-bold text-navy-900">Add credentials to the backend</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">Create <code class="code-inline">.env</code> from <code class="code-inline">.env.example</code>, paste the values, and restart FastAPI.</p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <pre class="code-block"><code>GOOGLE_API_KEY=your_google_api_key
+GOOGLE_CSE_ID=your_programmable_search_engine_id
+GOOGLE_PLACES_API_KEY=your_places_api_key
+
+# Optional tuning
+MAX_CONCURRENT_JOBS=3
+JOB_TTL_SECONDS=900
+CRAWL_RATE_LIMIT_SECONDS=0.75</code></pre>
+                <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+                  <p class="font-bold">Quotas and pricing</p>
+                  <p class="mt-1">Google Custom Search has a free daily query allowance and charges beyond it. Places API has its own billing and quotas. Limits, prices and availability can change; check Google Cloud Console for current values. LeadScope reports quota errors clearly and never retries in a loop.</p>
+                </div>
+                <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs leading-5 text-emerald-900">
+                  <p class="font-bold">No database architecture</p>
+                  <p class="mt-1">Active jobs live in Python memory only. Results return to this browser and can be exported. Use "Erase local history" to remove browser data. Restarting the server discards all jobs.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="border-t border-slate-200 bg-white">
+      <div class="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <p class="font-semibold text-slate-600">LeadScope <span class="mx-1 text-slate-300">/</span> Business Email Extractor &amp; Lead Finder</p>
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-database text-slate-300" aria-hidden="true"></i> No database</span>
+          <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-user-slash text-slate-300" aria-hidden="true"></i> No accounts</span>
+          <a href="/api/health" target="_blank" rel="noopener" class="font-semibold text-emerald-700 hover:text-emerald-800">API health</a>
+          <a href="/api/docs" target="_blank" rel="noopener" class="font-semibold text-emerald-700 hover:text-emerald-800">API docs</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="toastContainer" class="pointer-events-none fixed inset-x-4 bottom-4 z-[80] flex flex-col items-center gap-2 sm:left-auto sm:right-6 sm:items-end" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+  <script src="/export.js" defer></script>
+  <script src="/script.js" defer></script>
+</body>
+</html>
