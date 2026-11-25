@@ -113,6 +113,37 @@ def test_sync_extraction_end_to_end(api_client):
     assert "contact@northwind.co.uk" in emails
 
 
+def test_sync_extraction_returns_partial_on_timeout(api_client, monkeypatch):
+    async def slow_query(job, spec, settings):
+        job.stats["websites_discovered"] = 1
+        job.stats["websites_crawled"] = 1
+        job.total_email_occurrences = 1
+        job.results.append({
+            "email": "owner@example.com",
+            "company": "Example",
+            "domain": "example.com",
+            "category": "general",
+            "syntax_valid": True,
+            "source_url": "https://example.com/contact",
+        })
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(main, "_run_query", slow_query)
+    monkeypatch.setattr(main, "SYNC_MAX_SECONDS", 0.05)
+
+    response = api_client.post(
+        "/api/extract-sync",
+        json={"query": "Find business emails in Canada"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "done"
+    assert payload["partial"] is True
+    assert payload["message"].startswith("Partial extraction:")
+    assert [record["email"] for record in payload["results"]] == ["owner@example.com"]
+    assert payload["warnings"]
+
+
 def test_bulk_extraction_end_to_end(api_client):
     response = api_client.post(
         "/api/bulk-extract",

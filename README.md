@@ -148,8 +148,10 @@ an in-memory background job alive after it sends a response.
 `vercel.json` uses the legacy `builds` format for the Python function and the
 static frontend. Vercel rejects a `functions` block in the same file, so set the
 function duration in **Vercel → Project → Settings → Functions → Max Duration**
-(for example, 60 seconds). Vercel plan limits still apply. Large jobs should run
-on the local async server, where the UI uses SSE and `/api/extract`. No job
+(for example, 60 seconds). Vercel plan limits still apply. If the 55-second
+internal budget is reached, the API returns the emails already found with
+`"partial": true` and a warning instead of discarding them. Large jobs should
+run on the local async server, where the UI uses SSE and `/api/extract`. No job
 state is shared between Vercel invocations, and no database is used.
 
 ---
@@ -456,7 +458,7 @@ Run the JavaScript export tests:
 node --test tests/export.test.js
 ```
 
-Current results in this environment: **105 Python tests passed** and **6 Node
+Current results in this environment: **106 Python tests passed** and **6 Node
 tests passed**.
 
 Coverage includes:

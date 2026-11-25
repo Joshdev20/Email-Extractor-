@@ -208,6 +208,7 @@ class Job:
     current_domain: str | None = None
     target_emails: int = 50
     target_websites: int = 25
+    partial: bool = False
     completed_sites: int = 0
     total_sites: int = 0
     websites: list[dict[str, Any]] = field(default_factory=list)
@@ -270,6 +271,7 @@ class Job:
             "state": self.state,
             "complete": self.state in TERMINAL_STATES,
             "message": self.message,
+            "partial": self.partial,
             "parsed": self.parsed,
             "stats": self.stats_snapshot(),
             "warnings": self.warnings,
@@ -893,16 +895,31 @@ async def extract_sync(payload: ExtractRequest) -> dict[str, Any]:
             f"from {job.stats['websites_crawled']} website(s)"
         )
     except asyncio.TimeoutError:
-        job.state = "error"
-        job.phase = "error"
-        job.errors.append({
-            "scope": "timeout",
-            "message": (
-                "Extraction timed out on this serverless deployment. "
-                "Reduce the target or run the local async server for larger jobs."
-            ),
-        })
-        job.message = "Extraction timed out"
+        if job.results:
+            job.partial = True
+            job.state = "done"
+            job.phase = "done"
+            job.progress = 100
+            job.warnings.append(
+                "The serverless time limit was reached before the target. "
+                "These results are partial. Reduce the target or run the local "
+                "async server for a complete crawl."
+            )
+            job.message = (
+                f"Partial extraction: {len(job.results)} unique email(s) from "
+                f"{job.stats['websites_crawled']} website(s) before the time limit"
+            )
+        else:
+            job.state = "error"
+            job.phase = "error"
+            job.errors.append({
+                "scope": "timeout",
+                "message": (
+                    "Extraction timed out on this serverless deployment. "
+                    "Reduce the target or run the local async server for larger jobs."
+                ),
+            })
+            job.message = "Extraction timed out"
     except (SearchConfigError, SearchQuotaError, SearchError) as exc:
         job.state = "error"
         job.phase = "error"

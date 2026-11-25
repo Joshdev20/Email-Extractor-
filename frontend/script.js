@@ -416,7 +416,7 @@
       el.progressPercent.textContent = "100%";
       el.progressMessage.textContent = data.message || "Extraction complete";
       el.progressCurrentDomain.textContent = `${formatNumber(state.stats.unique_emails)} unique email(s) found`;
-      setProgressState(data.state || "done");
+      setProgressState(data.partial ? "partial" : (data.state || "done"));
       renderProgressStats(state.stats);
       renderProgressWebsites(state.websites);
       renderProgressIssues(data.warnings || [], data.errors || []);
@@ -430,11 +430,15 @@
 
       if (data.state === "done") {
         addHistory();
-        toast(
-          "Extraction complete",
-          `${formatNumber(state.stats.unique_emails)} unique email(s) from ${formatNumber(state.stats.websites_crawled)} website(s).`,
-          "success"
-        );
+        if (data.partial) {
+          toast("Partial results", data.message || "The serverless time limit was reached.", "warning");
+        } else {
+          toast(
+            "Extraction complete",
+            `${formatNumber(state.stats.unique_emails)} unique email(s) from ${formatNumber(state.stats.websites_crawled)} website(s).`,
+            "success"
+          );
+        }
       } else if (data.state === "cancelled") {
         toast("Extraction cancelled", "Partial results were kept in this session.", "warning");
       } else {
@@ -624,6 +628,7 @@
       queued: ["badge-navy", "fa-clock", "Queued"],
       running: ["badge-emerald", "fa-circle-notch fa-spin", "Running"],
       done: ["badge-emerald", "fa-circle-check", "Complete"],
+      partial: ["badge-amber", "fa-triangle-exclamation", "Partial"],
       error: ["badge-rose", "fa-circle-exclamation", "Failed"],
       cancelled: ["badge-amber", "fa-stop", "Cancelled"]
     };
@@ -731,11 +736,15 @@
 
       if (data.state === "done") {
         addHistory();
-        toast(
-          "Extraction complete",
-          `${formatNumber(state.stats.unique_emails)} unique email(s) from ${formatNumber(state.stats.websites_crawled)} website(s).`,
-          "success"
-        );
+        if (data.partial) {
+          toast("Partial results", data.message || "The serverless time limit was reached.", "warning");
+        } else {
+          toast(
+            "Extraction complete",
+            `${formatNumber(state.stats.unique_emails)} unique email(s) from ${formatNumber(state.stats.websites_crawled)} website(s).`,
+            "success"
+          );
+        }
       } else if (data.state === "cancelled") {
         if (state.results.length) addHistory();
         toast("Extraction cancelled", "Partial results were kept in this session.", "warning");
