@@ -185,28 +185,8 @@ body {
   font-size: 10px;
 }
 
-.notice-banner {
-  margin-bottom: 20px;
-  border: 1px solid #fde68a;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fffbeb, #fffdf5);
-  padding: 14px;
-  box-shadow: 0 18px 40px -30px rgba(120, 53, 15, 0.4);
-}
-
-.notice-icon {
-  display: inline-flex;
-  height: 38px;
-  width: 38px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: #fef3c7;
-  color: #92400e;
-}
-
 .card {
+  min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 22px;
   background: #fff;
@@ -990,13 +970,15 @@ body {
   display: none;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   #resultsTableWrap.is-visible {
     display: block;
   }
 }
 
 .mobile-result-card {
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background: #fff;
@@ -1008,7 +990,20 @@ body {
 }
 
 .mobile-result-card .source-link {
+  display: block;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-meta,
+.result-meta > div {
+  min-width: 0;
+}
+
+.result-meta dd {
+  min-width: 0;
 }
 
 @media (max-width: 359px) {
@@ -1055,45 +1050,6 @@ body {
   font-size: 11px;
   font-weight: 600;
   color: #334155;
-}
-
-.setup-step {
-  display: flex;
-  gap: 12px;
-}
-
-.setup-number {
-  display: inline-flex;
-  height: 28px;
-  width: 28px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--navy-900);
-  font-size: 11px;
-  font-weight: 800;
-  color: #fff;
-}
-
-.code-inline {
-  border-radius: 5px;
-  background: #f1f5f9;
-  padding: 2px 5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  color: #0f172a;
-}
-
-.code-block {
-  overflow-x: auto;
-  border-radius: 16px;
-  background: var(--navy-950);
-  padding: 16px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.8;
-  color: #a7f3d0;
 }
 
 .toast {
@@ -1228,6 +1184,21 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.toolbar,
+.toolbar > *,
+.search-wrap,
+#resultsCards {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }
 

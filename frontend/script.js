@@ -39,6 +39,7 @@
     jobId: null,
     eventSource: null,
     pollTimer: null,
+    syncAbort: null,
     jobFinished: false,
     busy: false,
     results: [],
@@ -71,7 +72,7 @@
 
   function cacheElements() {
     const ids = [
-      "mobileMenuButton", "mobileMenu", "setupBanner",
+      "mobileMenuButton", "mobileMenu",
       "panelNl", "panelDomains", "panelSingle",
       "queryInput", "domainsInput", "fileInput", "domainCount", "urlInput",
       "exampleChips", "planPanel", "startButton", "startButtonLabel", "previewButton",
@@ -358,6 +359,12 @@
     showProgress();
     setBusy(true);
 
+    if (!state.config) await loadConfig();
+    if (state.config && state.config.sync_extraction) {
+      await runSyncExtraction(input);
+      return;
+    }
+
     try {
       const data = await api(input.endpoint, {
         method: "POST",
@@ -374,7 +381,79 @@
       setBusy(false);
       showProgressError(error.message);
       toast("Could not start extraction", error.message, "error");
-      if (error.status === 503) el.setupBanner.classList.remove("hidden");
+    }
+  }
+
+  async function runSyncExtraction(input) {
+    const controller = new AbortController();
+    state.syncAbort = controller;
+    let synthetic = 8;
+    el.progressMessage.textContent = "Running extraction";
+    el.progressCurrentDomain.textContent = "This deployment processes the job inside one request";
+    const timer = window.setInterval(() => {
+      synthetic = Math.min(92, synthetic + 3);
+      el.progressBar.style.width = `${synthetic}%`;
+      el.progressBarWrap.setAttribute("aria-valuenow", String(synthetic));
+      el.progressPercent.textContent = `${synthetic}%`;
+    }, 1500);
+
+    try {
+      const data = await api("/api/extract-sync", {
+        method: "POST",
+        body: JSON.stringify(input.payload),
+        signal: controller.signal
+      });
+      window.clearInterval(timer);
+      state.jobId = data.job_id || null;
+      state.parsed = data.parsed || null;
+      state.stats = data.stats || emptyStats();
+      state.websites = data.websites || [];
+      state.results = Array.isArray(data.results) ? data.results : [];
+      state.selected.clear();
+      state.visibleCount = PAGE_STEP;
+      el.progressBar.style.width = "100%";
+      el.progressBarWrap.setAttribute("aria-valuenow", "100");
+      el.progressPercent.textContent = "100%";
+      el.progressMessage.textContent = data.message || "Extraction complete";
+      el.progressCurrentDomain.textContent = `${formatNumber(state.stats.unique_emails)} unique email(s) found`;
+      setProgressState(data.state || "done");
+      renderProgressStats(state.stats);
+      renderProgressWebsites(state.websites);
+      renderProgressIssues(data.warnings || [], data.errors || []);
+      setBusy(false);
+      renderResults();
+
+      if (state.results.length) {
+        el.results.classList.remove("hidden");
+        el.results.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      if (data.state === "done") {
+        addHistory();
+        toast(
+          "Extraction complete",
+          `${formatNumber(state.stats.unique_emails)} unique email(s) from ${formatNumber(state.stats.websites_crawled)} website(s).`,
+          "success"
+        );
+      } else if (data.state === "cancelled") {
+        toast("Extraction cancelled", "Partial results were kept in this session.", "warning");
+      } else {
+        const lastError = (data.errors || []).slice(-1)[0];
+        toast("Extraction failed", lastError ? lastError.message : "Please check the server logs.", "error");
+      }
+    } catch (error) {
+      window.clearInterval(timer);
+      setBusy(false);
+      if (error.name === "AbortError") {
+        setProgressState("cancelled");
+        el.progressMessage.textContent = "Extraction cancelled";
+        toast("Extraction cancelled", "The request was stopped in this browser.", "warning");
+        return;
+      }
+      showProgressError(error.message);
+      toast("Extraction failed", error.message, "error");
+    } finally {
+      state.syncAbort = null;
     }
   }
 
@@ -670,6 +749,10 @@
   }
 
   async function cancelExtraction() {
+    if (state.syncAbort) {
+      state.syncAbort.abort();
+      return;
+    }
     if (!state.jobId) return;
     el.cancelButton.disabled = true;
     try {
@@ -1155,11 +1238,9 @@
 
   async function loadConfig() {
     try {
-      const config = await api("/api/config");
-      state.config = config;
-      el.setupBanner.classList.toggle("hidden", Boolean(config.google_configured));
+      state.config = await api("/api/config");
     } catch {
-      el.setupBanner.classList.remove("hidden");
+      state.config = null;
     }
   }
 

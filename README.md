@@ -85,8 +85,8 @@ The frontend is served by FastAPI from `frontend/`. API documentation is at
 <http://localhost:8000/api/docs>.
 
 Manual domain extraction works without Google credentials. Natural-language
-discovery requires Google credentials and shows a clear setup banner until they
-are configured.
+discovery reads `GOOGLE_PLACES_API_KEY` from the server environment; there is no
+in-app setup screen and no key is ever sent to the browser.
 
 ### Environment variables
 
@@ -100,6 +100,8 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `ALLOWED_ORIGINS` | No | CORS origins, default `*`; set explicit origins in production |
 | `MAX_CONCURRENT_JOBS` | No | Concurrent extraction jobs, default `3` |
 | `MAX_JOB_SECONDS` | No | Hard job timeout, default `1800` |
+| `SYNC_EXTRACTION` | No | Set `1` to run each extraction inside one request; Vercel sets this automatically |
+| `SYNC_MAX_SECONDS` | No | Timeout for a synchronous request, default `55` |
 | `JOB_TTL_SECONDS` | No | In-memory job retention, default `900` |
 | `MAX_RETAINED_JOBS` | No | Maximum retained job snapshots, default `50` |
 | `RATE_LIMIT_PER_MINUTE` | No | General per-client request limit, default `120` |
@@ -111,6 +113,42 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `HOST` / `PORT` | No | Used by `python -m backend.main`, default `0.0.0.0:8000` |
 
 Google credentials stay on the Python side. The browser never receives them.
+
+---
+
+## Deploy to Vercel
+
+The repository includes a Vercel entrypoint and static routing:
+
+- `api/index.py` wraps the FastAPI app with `mangum`.
+- `vercel.json` serves `frontend/` as static files and routes `/api/*` to the
+  Python function.
+- `.vercelignore` keeps `.venv`, tests, and local env files out of the upload.
+
+1. Install the CLI and deploy:
+
+   ```bash
+   npm install -g vercel
+   vercel
+   vercel --prod
+   ```
+
+2. Add `GOOGLE_PLACES_API_KEY` in **Vercel → Project → Settings →
+   Environment Variables** for Production, Preview, and Development. Redeploy
+   after adding it. Do not commit a `.env` file.
+3. Open the deployment URL. `/api/health` should report
+   `"google_places_configured": true`.
+
+Vercel uses the synchronous extraction path. `/api/config` returns
+`"sync_extraction": true`, and the browser posts to `/api/extract-sync`. The
+function runs discovery and crawling inside one HTTP request and returns the
+results directly. This is necessary because a serverless function cannot keep
+an in-memory background job alive after it sends a response.
+
+`vercel.json` requests `maxDuration: 60` seconds. Vercel plan limits still apply.
+Large jobs should run on the local async server, where the UI uses SSE and
+`/api/extract`. No job state is shared between Vercel invocations, and no
+database is used.
 
 ---
 
@@ -416,7 +454,7 @@ Run the JavaScript export tests:
 node --test tests/export.test.js
 ```
 
-Current results in this environment: **104 Python tests passed** and **6 Node
+Current results in this environment: **105 Python tests passed** and **6 Node
 tests passed**.
 
 Coverage includes:
@@ -441,28 +479,34 @@ HTTP uses `httpx.MockTransport`.
 
 ### Live verification performed
 
-- `POST /api/crawl` against `https://www.mozilla.org/en-US/contact/` returned
-  `mozspaces@mozilla.com` and `trademark-permissions@mozilla.com` (3 valid
-  occurrences, 2 unique, 1 duplicate removed).
-- The mobile UI at 390 px extracted the same site, showed 2 unique emails,
-  filtered, sorted, removed a row, selected all, copied to the clipboard, and
-  downloaded CSV, TXT, JSON, and XLSX files with verified contents.
-- The same run confirmed no horizontal scrolling at 320, 375, 390, 768, and
-  1440 px; card-only results on phones and the table on desktop; local history
-  restore and erase; the mobile menu; and the clear
-  "Google search is not configured" error path.
+- Live Places API (New) discovery returned real UK real-estate websites; the
+  query variants produced 27 unique company domains for a 40-site target.
+- A live Canada marketing run using `/api/extract` discovered 4 websites,
+  crawled all 4, and returned 17 unique emails from 93 occurrences (76
+  duplicates removed).
+- `POST /api/extract-sync` against `https://www.canadacreate.com` returned
+  `info@canadacreate.com` from the contact page and completed in about 3
+  seconds.
+- The same sync flow was exercised through the mobile frontend at 390 px with
+  `SYNC_EXTRACTION=1`: progress reached 100%, the result card appeared, and the
+  dashboard stayed within the viewport.
+- Chromium checks at 320, 390, 768, and 1024 px reported
+  `scrollWidth === innerWidth`; phones and tablets use cards, and the table
+  appears at 1024 px and above.
+- Form controls computed to `16px` on mobile, which prevents iOS focus zoom.
+- The Vercel `Mangum` handler returned `200` for `/api/health` and for a
+  synchronous `POST /api/extract-sync` event.
 
-Google's live APIs were **not** called because this environment has no Google
-credentials. Their request construction and failure handling are covered by
-mocked tests; configure keys as described above to exercise live discovery.
+A full 500-email target was not run. Places caps each query at 60 results, and
+large jobs need multiple queries or a local async run. Extraction does not
+verify deliverability.
 
 ---
 
 ## Mobile usage
 
 1. Open the app URL in Safari (iPhone) or Chrome (Android).
-2. Use the menu button for Workspace, Results, History, Google setup, and API
-   docs.
+2. Use the menu button for Workspace, Results, History, and API docs.
 3. Choose **Describe**, **Domains**, or **Single URL**.
 4. Set optional industry, country, city, category, target emails, and target
    websites. Expand **Advanced crawling** for concurrency and page limits.
@@ -488,6 +532,8 @@ business-email-extractor/
 │   ├── email_extractor.py   extraction, dedupe, categorisation
 │   ├── validator.py         Pydantic request models
 │   └── security.py          SSRF checks and safe fetch
+├── api/
+│   └── index.py             Vercel Mangum entrypoint
 ├── frontend/
 │   ├── index.html
 │   ├── style.css
@@ -506,10 +552,12 @@ business-email-extractor/
 │   └── export.test.js
 ├── .env.example
 ├── .gitignore
+├── .vercelignore
 ├── AGENTS.md
 ├── pytest.ini
 ├── requirements.txt
 ├── requirements-dev.txt
+├── vercel.json
 └── README.md
 ```
 
@@ -518,9 +566,9 @@ business-email-extractor/
 ## Troubleshooting
 
 **"Google search is not configured"**
-Add `GOOGLE_PLACES_API_KEY` to `.env` and restart the server. Custom Search
-customers can add `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` instead. Manual domain
-mode does not need Google.
+Add `GOOGLE_PLACES_API_KEY` to `.env` (or to Vercel's environment variables) and
+restart or redeploy. Custom Search customers can add `GOOGLE_API_KEY` and
+`GOOGLE_CSE_ID` instead. Manual domain mode does not need Google.
 
 **`503` from `/api/search`**
 The key is missing, invalid, restricted, or the API is not enabled. For Places,

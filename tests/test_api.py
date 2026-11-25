@@ -78,6 +78,8 @@ def test_health_and_config(api_client):
     assert body["storage"] == "browser"
     assert body["database"] is False
     assert body["robots_respected"] is True
+    assert body["runtime"] in {"local", "vercel"}
+    assert isinstance(body["sync_extraction"], bool)
 
 
 def test_parse_query_endpoint(api_client):
@@ -91,6 +93,24 @@ def test_parse_query_endpoint(api_client):
     assert parsed["country_code"] == "GB"
     assert parsed["target_emails"] == 500
     assert parsed["search_queries"]
+
+
+def test_sync_extraction_end_to_end(api_client):
+    response = api_client.post(
+        "/api/extract-sync",
+        json={
+            "domains": ["example.com"],
+            "settings": {"concurrency": 1, "max_pages_per_domain": 6},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "done", payload
+    assert payload["complete"] is True
+    assert payload["stats"]["websites_crawled"] == 1
+    assert payload["stats"]["unique_emails"] == 10
+    emails = {record["email"] for record in payload["results"]}
+    assert "contact@northwind.co.uk" in emails
 
 
 def test_bulk_extraction_end_to_end(api_client):

@@ -69,6 +69,8 @@ APP_VERSION = "1.0.0"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "3")))
 MAX_JOB_SECONDS = max(60, int(os.getenv("MAX_JOB_SECONDS", "1800")))
+SYNC_MAX_SECONDS = max(10, min(300, int(os.getenv("SYNC_MAX_SECONDS", "55"))))
+IS_SERVERLESS = bool(os.getenv("VERCEL")) or os.getenv("SYNC_EXTRACTION", "0") == "1"
 JOB_TTL_SECONDS = max(60, int(os.getenv("JOB_TTL_SECONDS", "900")))
 MAX_RETAINED_JOBS = max(10, int(os.getenv("MAX_RETAINED_JOBS", "50")))
 RATE_LIMIT_PER_MINUTE = max(10, int(os.getenv("RATE_LIMIT_PER_MINUTE", "120")))
@@ -90,6 +92,7 @@ TERMINAL_STATES = {"done", "error", "cancelled"}
 EXTRACTION_PATHS = {
     "/api/search",
     "/api/extract",
+    "/api/extract-sync",
     "/api/bulk-extract",
     "/api/crawl",
 }
@@ -266,6 +269,7 @@ class Job:
             "kind": self.kind,
             "state": self.state,
             "complete": self.state in TERMINAL_STATES,
+            "message": self.message,
             "parsed": self.parsed,
             "stats": self.stats_snapshot(),
             "warnings": self.warnings,
@@ -763,6 +767,9 @@ async def config() -> dict[str, Any]:
         "google_cse_configured": google_config.cse_ready,
         "google_places_configured": google_config.places_ready,
         "google_configured": google_config.any_ready,
+        "runtime": "vercel" if os.getenv("VERCEL") else "local",
+        "sync_extraction": IS_SERVERLESS,
+        "sync_max_seconds": SYNC_MAX_SECONDS,
         "robots_respected": True,
         "max_target_emails": 1000,
         "max_target_websites": 200,
@@ -784,6 +791,7 @@ async def parse_query_endpoint(payload: SearchRequest) -> dict[str, Any]:
 
 @app.post("/api/search")
 async def search(payload: SearchRequest) -> dict[str, Any]:
+    await manager.start()
     assert manager.client is not None
     try:
         spec = parse_query(payload.query, overrides=_settings_overrides(payload.settings))
@@ -809,6 +817,7 @@ async def search(payload: SearchRequest) -> dict[str, Any]:
 
 @app.post("/api/extract", response_model=JobCreated, status_code=202)
 async def extract(payload: ExtractRequest) -> JobCreated:
+    await manager.start()
     try:
         spec = _build_spec(payload.query, payload.domains, payload.urls, payload.settings)
     except ValueError as exc:
@@ -838,8 +847,87 @@ async def extract(payload: ExtractRequest) -> JobCreated:
     )
 
 
+@app.post("/api/extract-sync")
+async def extract_sync(payload: ExtractRequest) -> dict[str, Any]:
+    """Run one extraction inside the request, for serverless hosts like Vercel."""
+    await manager.start()
+    try:
+        spec = _build_spec(payload.query, payload.domains, payload.urls, payload.settings)
+    except ValueError as exc:
+        raise StarletteHTTPException(status_code=422, detail=str(exc)) from exc
+
+    manual = _manual_targets(payload.domains, payload.urls, spec.target_websites)
+    if manual:
+        runner = lambda job: _run_targets(job, manual, payload.settings)  # noqa: E731
+        kind = "domains"
+    else:
+        runner = lambda job: _run_query(job, spec, payload.settings)  # noqa: E731
+        kind = "query"
+
+    job = Job(
+        id=uuid.uuid4().hex,
+        kind=kind,
+        runner=runner,
+        parsed=spec.to_dict(),
+        target_emails=spec.target_emails,
+        target_websites=spec.target_websites,
+    )
+    job.total_sites = job.target_websites
+    job.state = "running"
+    job.phase = "starting"
+    job.message = "Starting extraction"
+    job.progress = 5
+
+    try:
+        await asyncio.wait_for(runner(job), timeout=SYNC_MAX_SECONDS)
+        if not job.results:
+            job.warnings.append(
+                "No publicly listed email addresses were found. Try more websites, "
+                "a different location, or a broader industry."
+            )
+        job.state = "done"
+        job.phase = "done"
+        job.progress = 100
+        job.message = (
+            f"Extraction complete: {len(job.results)} unique email(s) "
+            f"from {job.stats['websites_crawled']} website(s)"
+        )
+    except asyncio.TimeoutError:
+        job.state = "error"
+        job.phase = "error"
+        job.errors.append({
+            "scope": "timeout",
+            "message": (
+                "Extraction timed out on this serverless deployment. "
+                "Reduce the target or run the local async server for larger jobs."
+            ),
+        })
+        job.message = "Extraction timed out"
+    except (SearchConfigError, SearchQuotaError, SearchError) as exc:
+        job.state = "error"
+        job.phase = "error"
+        job.errors.append({"scope": "search", "message": str(exc)})
+        job.message = str(exc)
+    except CrawlCancelled:
+        job.state = "cancelled"
+        job.phase = "cancelled"
+        job.message = "Extraction cancelled"
+    except Exception as exc:  # noqa: BLE001 - never leak internals to the client
+        logger.exception("Synchronous extraction failed")
+        job.state = "error"
+        job.phase = "error"
+        job.errors.append({"scope": "internal", "message": exc.__class__.__name__})
+        job.message = "Extraction failed unexpectedly. Please try again."
+    finally:
+        job.finished_at = time.time()
+        job.updated_at = job.finished_at
+
+    return job.results_payload()
+
+
 @app.post("/api/bulk-extract", response_model=JobCreated, status_code=202)
 async def bulk_extract(payload: BulkExtractRequest) -> JobCreated:
+    await manager.start()
     try:
         spec = _build_spec(None, payload.domains, payload.urls, payload.settings)
     except ValueError as exc:
@@ -867,6 +955,7 @@ async def bulk_extract(payload: BulkExtractRequest) -> JobCreated:
 
 @app.post("/api/crawl")
 async def crawl_single(payload: CrawlRequest) -> dict[str, Any]:
+    await manager.start()
     assert manager.client is not None
     config = CrawlConfig(
         max_pages_per_domain=payload.max_pages,

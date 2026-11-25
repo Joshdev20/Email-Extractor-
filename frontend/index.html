@@ -50,7 +50,6 @@
           <a class="nav-link" href="#workspace">Workspace</a>
           <a class="nav-link" href="#results">Results</a>
           <a class="nav-link" href="#history">History</a>
-          <a class="nav-link" href="#setup">Google setup</a>
           <a class="nav-link" href="/api/docs" target="_blank" rel="noopener">API docs</a>
         </nav>
 
@@ -70,7 +69,6 @@
           <a class="mobile-nav-link" href="#workspace">Workspace</a>
           <a class="mobile-nav-link" href="#results">Results</a>
           <a class="mobile-nav-link" href="#history">History</a>
-          <a class="mobile-nav-link" href="#setup">Google setup</a>
           <a class="mobile-nav-link" href="/api/docs" target="_blank" rel="noopener">API docs</a>
         </nav>
       </div>
@@ -103,19 +101,6 @@
       </section>
 
       <div class="relative z-10 mx-auto -mt-14 w-full max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
-        <div id="setupBanner" class="hidden notice-banner" role="status">
-          <div class="flex items-start gap-3">
-            <span class="notice-icon"><i class="fa-solid fa-key" aria-hidden="true"></i></span>
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-bold text-navy-900">Google search is not configured yet</p>
-              <p class="mt-1 text-xs leading-5 text-slate-600">
-                Natural-language discovery uses Google Places API (New). Custom Search JSON API is closed to new customers. Manual domain extraction works without Google. Add a Places API (New) key on the server, then reload this page.
-              </p>
-            </div>
-            <a href="#setup" class="btn-secondary shrink-0 text-xs">Setup guide</a>
-          </div>
-        </div>
-
         <section id="workspace" class="grid gap-6 lg:grid-cols-12" aria-labelledby="workspaceTitle">
           <div class="card lg:col-span-7">
             <div class="card-header">
@@ -426,7 +411,7 @@
               </div>
             </div>
 
-            <div id="resultsCards" class="mt-4 grid gap-3 md:hidden"></div>
+            <div id="resultsCards" class="mt-4 grid gap-3 lg:hidden"></div>
 
             <div id="resultsEmpty" class="hidden py-14 text-center">
               <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span>
@@ -457,62 +442,6 @@
           </div>
         </section>
 
-        <section id="setup" class="mt-10" aria-labelledby="setupTitle">
-          <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card">
-            <div class="bg-navy-900 px-5 py-6 text-white sm:px-7">
-              <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300">Configuration</p>
-              <h2 id="setupTitle" class="mt-1 text-xl font-extrabold tracking-tight">Connect Google search</h2>
-              <p class="mt-2 max-w-3xl text-xs leading-5 text-slate-300">
-                LeadScope uses Google's supported APIs only. It never scrapes Google result pages and never exposes API keys to the browser.
-              </p>
-            </div>
-            <div class="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-2">
-              <div class="space-y-4">
-                <div class="setup-step">
-                  <span class="setup-number">1</span>
-                  <div>
-                    <p class="text-sm font-bold text-navy-900">Enable Places API (New)</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">In Google Cloud Console, enable Places API (New) and attach billing, or get a no-cost Maps Demo Key. Custom Search JSON API is closed to new customers; existing customers can keep using it until January 1, 2027.</p>
-                  </div>
-                </div>
-                <div class="setup-step">
-                  <span class="setup-number">2</span>
-                  <div>
-                    <p class="text-sm font-bold text-navy-900">Create an API key</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">Restrict the key to Places API (New), not the legacy Places API. For existing Custom Search customers, also create a Programmable Search Engine and copy its Search engine ID (cx).</p>
-                  </div>
-                </div>
-                <div class="setup-step">
-                  <span class="setup-number">3</span>
-                  <div>
-                    <p class="text-sm font-bold text-navy-900">Add credentials to the backend</p>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">Create <code class="code-inline">.env</code> from <code class="code-inline">.env.example</code>, paste the values, and restart FastAPI.</p>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <pre class="code-block"><code>GOOGLE_PLACES_API_KEY=your_places_api_new_key
-
-# Existing Custom Search customers only:
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_CSE_ID=your_programmable_search_engine_id
-
-# Optional tuning
-MAX_CONCURRENT_JOBS=3
-JOB_TTL_SECONDS=900
-CRAWL_RATE_LIMIT_SECONDS=0.75</code></pre>
-                <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
-                  <p class="font-bold">Quotas and pricing</p>
-                  <p class="mt-1">Places API (New) is usage-billed. A Maps Demo Key has no billing but a limited daily quota. LeadScope follows Places page tokens and may issue up to three query variants, so a large target can use several API calls. Custom Search JSON API is closed to new customers; existing customers keep their quota until January 1, 2027. Limits, prices and availability can change; check Google Cloud Console for current values. LeadScope reports quota errors clearly and never retries in a loop.</p>
-                </div>
-                <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs leading-5 text-emerald-900">
-                  <p class="font-bold">No database architecture</p>
-                  <p class="mt-1">Active jobs live in Python memory only. Results return to this browser and can be exported. Use "Erase local history" to remove browser data. Restarting the server discards all jobs.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </main>
 

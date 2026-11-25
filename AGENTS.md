@@ -38,6 +38,13 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 - `backend/validator.py` - Pydantic request models and input cleaning.
 - `frontend/` - static mobile-first UI; `export.js` is a UMD module shared with
   the Node tests.
+- `api/index.py` - Vercel `mangum` entrypoint. `vercel.json` serves `frontend/`
+  statically and routes `/api/*` to the function.
+- On Vercel (`VERCEL` env is set), `/api/config` returns
+  `sync_extraction: true`. The frontend then calls `/api/extract-sync`, which
+  runs discovery and crawling inside one request because serverless functions
+  cannot keep in-memory background jobs alive. Local mode keeps async jobs and
+  SSE.
 
 ## Google API availability
 
