@@ -133,6 +133,9 @@
                 <button type="button" class="example-chip" data-example="Find customer support emails from e-commerce companies.">E-commerce support</button>
                 <button type="button" class="example-chip" data-example="Find recruitment agencies in London.">London recruitment</button>
                 <button type="button" class="example-chip" data-example="Find publicly listed business contacts for software companies in Germany.">Germany software</button>
+                <button type="button" class="example-chip" data-example="Find publicly listed business email addresses for Alibaba suppliers in the United States.">Alibaba suppliers</button>
+                <button type="button" class="example-chip" data-example="Find publicly listed business email addresses for Adobe 365 partners in Canada.">Adobe 365 partners</button>
+                <button type="button" class="example-chip" data-example="Find publicly listed business email addresses for Microsoft Teams consultants in the United Kingdom.">Microsoft Teams consultants</button>
               </div>
             </div>
 
@@ -185,9 +188,17 @@
             </div>
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div class="sm:col-span-2">
+                <label for="industryPreset" class="field-label">Category preset</label>
+                <select id="industryPreset" class="select-input">
+                  <option value="">Choose a category or type below</option>
+                </select>
+                <p class="field-hint">Fills the industry field and a ready-to-run search description.</p>
+              </div>
               <div>
-                <label for="industryInput" class="field-label">Industry</label>
-                <input id="industryInput" type="text" class="text-input" maxlength="80" placeholder="e.g. real estate">
+                <label for="industryInput" class="field-label">Industry / category</label>
+                <input id="industryInput" type="text" class="text-input" maxlength="80" list="industrySuggestions" placeholder="e.g. real estate or Microsoft Teams consultants">
+                <datalist id="industrySuggestions"></datalist>
               </div>
               <div>
                 <label for="countrySelect" class="field-label">Country</label>

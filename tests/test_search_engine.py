@@ -119,6 +119,11 @@ def places_quota_response() -> httpx.Response:
         ("Find recruitment agencies in London.", "recruitment", "GB", "London", None, 50),
         ("Find publicly listed business contacts for software companies in Germany.", "software", "DE", None, None, 50),
         ("Find 120 sales emails from fintech startups in Berlin, Germany.", "fintech", "DE", "Berlin", "sales", 120),
+        ("Find Alibaba suppliers in the United States.", "Alibaba suppliers", "US", None, None, 50),
+        ("Find Adobe 365 partners in Canada.", "Adobe 365 partners", "CA", None, None, 50),
+        ("Find Microsoft Teams consultants in London.", "Microsoft Teams consultants", "GB", "London", None, 50),
+        ("Find Microsoft 365 partners in Germany.", "Microsoft 365 partners", "DE", None, None, 50),
+        ("Find Salesforce partners in Canada.", "Salesforce partners", "CA", None, None, 50),
     ],
 )
 def test_parse_query_examples(query, industry, country, city, category, count):
@@ -165,6 +170,13 @@ def test_build_places_queries_uses_company_agency_and_services_variants():
         "real estate agency in United Kingdom",
         "real estate services in United Kingdom",
     ]
+
+
+def test_build_places_queries_keeps_category_forms():
+    spec = parse_query("Find Alibaba suppliers in Canada")
+    assert build_places_queries(spec) == ["Alibaba suppliers in Canada"]
+    spec = parse_query("Find Microsoft Teams consultants in Canada")
+    assert build_places_queries(spec) == ["Microsoft Teams consultants in Canada"]
 
 
 def test_build_search_queries_uses_site_operators_for_domains():

@@ -28,7 +28,10 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 - `backend/main.py` - FastAPI app, in-memory `JobManager`, SSE progress,
   rate limiting, security headers, static frontend serving.
 - `backend/search_engine.py` - Google Places/CSE client, natural-language
-  `QuerySpec` parser (keyword based, not an LLM), domain ranking.
+  `QuerySpec` parser (keyword based, not an LLM), domain ranking. Platform
+  categories such as Alibaba suppliers, Adobe 365 partners, Microsoft Teams
+  consultants, Microsoft 365 partners, Salesforce, AWS, and Google Workspace
+  are recognized before the generic software pattern.
 - `backend/crawler.py` - async crawler, robots.txt, link priority, per-domain
   limits/rate limiting, cancellation, result aggregation.
 - `backend/email_extractor.py` - regex/BeautifulSoup extraction, obfuscated

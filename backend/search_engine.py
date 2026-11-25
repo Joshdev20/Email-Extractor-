@@ -349,6 +349,22 @@ _CITIES: dict[str, tuple[str, str]] = {
 }
 
 _INDUSTRY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\balibaba(?:\.com)?\b|\baliexpress\b"), "Alibaba suppliers"),
+    (re.compile(r"\badobe\s+365\b"), "Adobe 365 partners"),
+    (re.compile(r"\badobe\s+creative\s+cloud\b"), "Adobe Creative Cloud partners"),
+    (re.compile(r"\badobe\b"), "Adobe partners"),
+    (re.compile(r"\bmicrosoft\s+teams\b|\bms\s+teams\b"), "Microsoft Teams consultants"),
+    (re.compile(r"\bmicrosoft\s*365\b|\boffice\s*365\b"), "Microsoft 365 partners"),
+    (re.compile(r"\bsalesforce\b"), "Salesforce partners"),
+    (re.compile(r"\bhubspot\b"), "HubSpot agencies"),
+    (re.compile(r"\bshopify\b"), "Shopify agencies"),
+    (re.compile(r"\baws\b|\bamazon\s+web\s+services\b"), "AWS partners"),
+    (re.compile(r"\bgoogle\s+workspace\b|\bg\s*suite\b"), "Google Workspace partners"),
+    (re.compile(r"\bsap\b"), "SAP consultants"),
+    (re.compile(r"\boracle\b"), "Oracle partners"),
+    (re.compile(r"\bcisco\b"), "Cisco partners"),
+    (re.compile(r"\bzoom\b"), "Zoom partners"),
+    (re.compile(r"\bslack\b"), "Slack consultants"),
     (re.compile(r"\breal[\s-]?estate\b|\bproperty\b|\brealtors?\b"), "real estate"),
     (re.compile(r"\be-?commerce\b|\bonline\s+retail\b"), "e-commerce"),
     (re.compile(r"\bweb\s+development\b|\bweb\s+design\b|\bweb\s+agenc"), "web development"),
@@ -588,7 +604,13 @@ def build_places_queries(spec: QuerySpec) -> list[str]:
         return [f"{base} in {location}" if location else base]
 
     lowered = industry.lower()
-    if lowered.endswith(("company", "companies", "agency", "agencies")):
+    business_forms = (
+        "company", "companies", "agency", "agencies", "supplier", "suppliers",
+        "vendor", "vendors", "consultant", "consultants", "partner", "partners",
+        "provider", "providers", "firm", "firms", "reseller", "resellers",
+        "integrator", "integrators",
+    )
+    if lowered.endswith(business_forms):
         terms = [industry]
     else:
         terms = [f"{industry} companies", f"{industry} agency", f"{industry} services"]

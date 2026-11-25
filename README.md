@@ -15,6 +15,12 @@ storage**. Active jobs live in Python memory. Browser history lives in
 
 - Natural-language search: industry, country, city, email category, target
   count, and optional domains.
+- Category presets for software, cloud, and platform searches: Alibaba
+  suppliers, Adobe 365 partners, Microsoft Teams consultants, Microsoft 365,
+  Salesforce, HubSpot, Shopify, AWS, Google Workspace, SAP, Oracle, Cisco,
+  Zoom, Slack, IT services, SaaS, cloud, cybersecurity, and common industries.
+  Choosing a preset fills both the industry field and a ready-to-run search
+  description.
 - Google Places API (New) business discovery, with optional Custom Search
   JSON API support for existing customers.
 - Async Python crawler with `robots.txt`, link prioritisation, per-domain page

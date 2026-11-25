@@ -27,6 +27,62 @@
     jsonld: "Structured data"
   };
 
+  const INDUSTRY_PRESET_GROUPS = [
+    {
+      label: "Software, cloud, and platforms",
+      options: [
+        "Alibaba suppliers",
+        "Alibaba B2B vendors",
+        "Adobe 365 partners",
+        "Adobe Creative Cloud partners",
+        "Microsoft Teams consultants",
+        "Microsoft 365 partners",
+        "Office 365 resellers",
+        "Salesforce partners",
+        "HubSpot agencies",
+        "Shopify agencies",
+        "AWS partners",
+        "Google Workspace partners",
+        "SAP consultants",
+        "Oracle partners",
+        "Cisco partners",
+        "Zoom partners",
+        "Slack consultants",
+        "IT services",
+        "SaaS companies",
+        "Cloud services",
+        "Cybersecurity companies",
+        "Managed service providers"
+      ]
+    },
+    {
+      label: "Business services",
+      options: [
+        "Digital marketing agencies",
+        "Web development companies",
+        "E-commerce agencies",
+        "Recruitment agencies",
+        "Accounting firms",
+        "Legal services",
+        "Consulting firms",
+        "Logistics companies"
+      ]
+    },
+    {
+      label: "Industries",
+      options: [
+        "Real estate companies",
+        "Healthcare providers",
+        "Construction companies",
+        "Manufacturing companies",
+        "Financial services",
+        "Insurance companies",
+        "Hospitality businesses",
+        "Education providers"
+      ]
+    }
+  ];
+
   const TOAST_ICONS = {
     success: "fa-circle-check",
     error: "fa-circle-exclamation",
@@ -51,7 +107,8 @@
     visibleCount: PAGE_STEP,
     history: [],
     config: null,
-    currentLabel: ""
+    currentLabel: "",
+    presetQuery: ""
   };
 
   const el = {};
@@ -60,6 +117,7 @@
 
   function init() {
     cacheElements();
+    populateIndustryPresets();
     loadPreferences();
     loadHistory();
     bindEvents();
@@ -76,7 +134,7 @@
       "panelNl", "panelDomains", "panelSingle",
       "queryInput", "domainsInput", "fileInput", "domainCount", "urlInput",
       "exampleChips", "planPanel", "startButton", "startButtonLabel", "previewButton",
-      "industryInput", "countrySelect", "cityInput", "categorySelect",
+      "industryInput", "industryPreset", "countrySelect", "cityInput", "categorySelect",
       "targetEmails", "targetWebsites", "concurrencyRange", "concurrencyValue",
       "maxPagesRange", "maxPagesValue", "usePlacesToggle",
       "progressSection", "progressStateBadge", "progressPercent", "cancelButton",
@@ -148,6 +206,8 @@
 
     ["industryInput", "countrySelect", "cityInput", "categorySelect", "targetEmails", "targetWebsites", "usePlacesToggle"]
       .forEach((id) => el[id].addEventListener("change", savePreferences));
+    el.industryPreset.addEventListener("change", applyIndustryPreset);
+    el.industryInput.addEventListener("input", syncIndustryPreset);
     el.concurrencyRange.addEventListener("input", () => {
       updateRangeLabels();
       savePreferences();
@@ -233,6 +293,45 @@
     el.maxPagesValue.textContent = el.maxPagesRange.value;
   }
 
+  function populateIndustryPresets() {
+    const suggestions = document.getElementById("industrySuggestions");
+    INDUSTRY_PRESET_GROUPS.forEach((group) => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      group.options.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        optgroup.appendChild(option);
+        if (suggestions) {
+          const suggestion = document.createElement("option");
+          suggestion.value = value;
+          suggestions.appendChild(suggestion);
+        }
+      });
+      el.industryPreset.appendChild(optgroup);
+    });
+  }
+
+  function syncIndustryPreset() {
+    const value = el.industryInput.value.trim();
+    const match = Array.from(el.industryPreset.options).some((option) => option.value === value);
+    el.industryPreset.value = match ? value : "";
+  }
+
+  function applyIndustryPreset() {
+    const value = el.industryPreset.value;
+    if (!value) return;
+    el.industryInput.value = value;
+    const query = el.queryInput.value.trim();
+    if (!query || query === state.presetQuery) {
+      const next = `Find publicly listed business email addresses for ${value}.`;
+      el.queryInput.value = next;
+      state.presetQuery = next;
+    }
+    savePreferences();
+  }
+
   function updateDomainCount() {
     const parsed = parseDomainLines(el.domainsInput.value);
     const total = parsed.domains.length + parsed.urls.length;
@@ -290,7 +389,7 @@
       target_emails: numberOrNull(el.targetEmails.value),
       target_websites: numberOrNull(el.targetWebsites.value),
       country: el.countrySelect.value || null,
-      industry: el.industryInput.value.trim() || null,
+      industry: el.industryInput.value.trim() || el.industryPreset.value || null,
       city: el.cityInput.value.trim() || null,
       email_category: el.categorySelect.value || null,
       concurrency: Number(el.concurrencyRange.value),
@@ -1573,7 +1672,10 @@
     try {
       const prefs = JSON.parse(localStorage.getItem(PREF_KEY) || "{}");
       if (prefs.mode) state.mode = prefs.mode;
-      if (prefs.industry) el.industryInput.value = prefs.industry;
+      if (prefs.industry) {
+        el.industryInput.value = prefs.industry;
+        syncIndustryPreset();
+      }
       if (prefs.country) el.countrySelect.value = prefs.country;
       if (prefs.city) el.cityInput.value = prefs.city;
       if (prefs.category) el.categorySelect.value = prefs.category;
