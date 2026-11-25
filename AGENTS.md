@@ -35,8 +35,10 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
   is relevance-gated in `_CATEGORY_RELEVANCE` / `_category_matches`; if Google
   returns only unrelated businesses, `category_seed` uses official domains so
   Alibaba results stay Alibaba-related.
-- `backend/crawler.py` - async crawler, robots.txt, link priority, per-domain
-  limits/rate limiting, cancellation, result aggregation.
+- `backend/crawler.py` - async crawler, robots.txt, recursive priority links
+  (contact, about, team, buyer, seller), per-domain limits/rate limiting,
+  cancellation, result aggregation. `401`/`403` marks `auth_required` and is
+  skipped; never add login bypasses or credential persistence.
 - `backend/email_extractor.py` - regex/BeautifulSoup extraction, obfuscated
   emails, JSON-LD, dedupe, syntax checks, categorisation.
 - `backend/security.py` - SSRF validation, safe fetch with redirect checks,

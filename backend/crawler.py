@@ -39,6 +39,13 @@ _PRIORITY_RULES: tuple[tuple[str, re.Pattern[str], int], ...] = (
         r"contact|kontakt|contacto|contactez|get-in-touch|getintouch|reach-us|"
         r"reachout|talk-to-us|enquir|inquir"
     ), 100),
+    ("buyer", re.compile(
+        r"\b(?:buyers?|buying|sourcing|procurement|purchas\w*|import(?:s|ers?)?)\b"
+    ), 85),
+    ("seller", re.compile(
+        r"\b(?:sellers?|suppliers?|vendors?|manufacturers?|wholesale|distributors?|"
+        r"trade|trading)\b"
+    ), 85),
     ("about", re.compile(
         r"about|who-we-are|whoweare|our-story|ourstory|company|impressum|imprint|"
         r"quienes-somos|uber-uns"
@@ -97,6 +104,7 @@ class SiteCrawlResult:
     raw_email_count: int = 0
     errors: list[str] = field(default_factory=list)
     blocked_by_robots: bool = False
+    auth_required: int = 0
     duration_ms: int = 0
 
     @property
@@ -115,6 +123,7 @@ class SiteCrawlResult:
             "raw_email_count": self.raw_email_count,
             "errors": self.errors,
             "blocked_by_robots": self.blocked_by_robots,
+            "auth_required": self.auth_required,
             "duration_ms": self.duration_ms,
             "success": self.success,
         }
@@ -322,7 +331,14 @@ class Crawler:
             raise
         except (security.FetchError, security.UnsafeURLError) as exc:
             site.pages_failed = 1
-            site.errors.append(str(exc)[:200])
+            if isinstance(exc, security.FetchError) and exc.status_code in (401, 403):
+                site.auth_required = 1
+                site.errors.append(
+                    "Authentication required; skipped. This crawler never bypasses "
+                    "login or access controls."
+                )
+            else:
+                site.errors.append(str(exc)[:200])
             site.duration_ms = int((time.monotonic() - started) * 1000)
             return site
 
@@ -347,46 +363,81 @@ class Crawler:
             "site_emails": len(site.emails),
         })
 
-        links = self._discover_links(home.text, home.url, domain)
-        limit = max(0, self.config.max_pages_per_domain - 1)
-        selected = links[:limit]
-
+        pending = self._discover_links(home.text, home.url, domain)
+        remaining = max(0, self.config.max_pages_per_domain - 1)
+        seen = {home.url}
         page_results: list[tuple[int, security.FetchResult, list[ExtractedEmail], str, str, int]] = []
         semaphore = asyncio.Semaphore(self.config.per_domain_concurrency)
 
-        async def fetch_link(link: _DiscoveredLink) -> None:
+        async def fetch_link(
+            link: _DiscoveredLink,
+        ) -> tuple[int, security.FetchResult, list[ExtractedEmail], str, str, int] | None:
             async with semaphore:
                 self._check_cancelled()
                 try:
                     if not await self._allowed(link.url):
-                        return
+                        return None
                     result, emails, company, country, raw_count = await self._crawl_page(
                         link.url, domain, company=site.company, country=site.country
                     )
-                    page_results.append((link.score, result, emails, company, country, raw_count))
-                    await self._emit({
-                        "phase": "crawling",
-                        "message": f"Crawled {domain}{urlsplit(result.url).path or '/'}",
-                        "current_domain": domain,
-                        "site_pages": site.pages_crawled + len(page_results),
-                        "site_emails": len(site.emails) + sum(len(item[2]) for item in page_results),
-                    })
+                    return link.score, result, emails, company, country, raw_count
                 except CrawlCancelled:
                     raise
                 except (security.FetchError, security.UnsafeURLError) as exc:
                     site.pages_failed += 1
-                    if len(site.errors) < 20:
+                    if isinstance(exc, security.FetchError) and exc.status_code in (401, 403):
+                        site.auth_required += 1
+                        if len(site.errors) < 20:
+                            site.errors.append(
+                                f"{link.url}: authentication required; skipped without "
+                                "bypassing access controls"
+                            )
+                    elif len(site.errors) < 20:
                         site.errors.append(f"{link.url}: {str(exc)[:160]}")
+                    return None
 
-        if selected:
-            results = await asyncio.gather(
-                *(fetch_link(link) for link in selected), return_exceptions=True
+        while pending and remaining > 0:
+            pending.sort(key=lambda item: (-item.score, item.url))
+            batch: list[_DiscoveredLink] = []
+            queued: set[str] = set()
+            for link in pending:
+                if link.url in seen or link.url in queued:
+                    continue
+                batch.append(link)
+                queued.add(link.url)
+                if len(batch) >= remaining:
+                    break
+            if not batch:
+                break
+            seen.update(queued)
+            pending = [link for link in pending if link.url not in queued]
+
+            outcomes = await asyncio.gather(
+                *(fetch_link(link) for link in batch), return_exceptions=True
             )
-            for outcome in results:
+            for outcome in outcomes:
                 if isinstance(outcome, CrawlCancelled):
                     raise outcome
                 if isinstance(outcome, Exception):
-                    site.errors.append(str(outcome)[:160])
+                    if len(site.errors) < 20:
+                        site.errors.append(str(outcome)[:160])
+                    continue
+                if outcome is None:
+                    continue
+                score, result, emails, company, country, raw_count = outcome
+                seen.add(result.url)
+                page_results.append((score, result, emails, company, country, raw_count))
+                for link in self._discover_links(result.text, result.url, domain):
+                    if link.url not in seen:
+                        pending.append(link)
+                await self._emit({
+                    "phase": "crawling",
+                    "message": f"Crawled {domain}{urlsplit(result.url).path or '/'}",
+                    "current_domain": domain,
+                    "site_pages": site.pages_crawled + len(page_results),
+                    "site_emails": len(site.emails) + sum(len(item[2]) for item in page_results),
+                })
+            remaining -= len(batch)
 
         page_results.sort(key=lambda item: -item[0])
         by_email: dict[str, tuple[int, ExtractedEmail]] = {

@@ -27,8 +27,14 @@ storage**. Active jobs live in Python memory. Browser history lives in
   crawling unrelated businesses.
 - Google Places API (New) business discovery, with optional Custom Search
   JSON API support for existing customers.
-- Async Python crawler with `robots.txt`, link prioritisation, per-domain page
-  limits, concurrency limits, timeouts, retries, and cancellation.
+- Async Python crawler with `robots.txt`, recursive link prioritisation,
+  per-domain page limits, concurrency limits, timeouts, retries, and
+  cancellation. It starts at the homepage, prioritises contact, about, team,
+  buyer, and seller pages, then follows useful links from those pages up to the
+  configured page limit (15 on the frontend).
+- Login-protected pages are skipped. The crawler detects `401` and `403`
+  responses, records that authentication was required, and never bypasses
+  logins, CAPTCHAs, paywalls, or other access controls.
 - Email extraction from visible text, `mailto:` links, HTML attributes,
   JSON-LD, and visibly obfuscated forms such as `name [at] domain [dot] com`.
 - Deduplication, syntax validation, domain association, source URL, company,

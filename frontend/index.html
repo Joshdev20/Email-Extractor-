@@ -272,7 +272,8 @@
                     <label for="maxPagesRange" class="field-label mb-0">Max pages per website</label>
                     <span id="maxPagesValue" class="range-value">6</span>
                   </div>
-                  <input id="maxPagesRange" type="range" min="1" max="12" value="6" class="range-input">
+                  <input id="maxPagesRange" type="range" min="1" max="15" value="6" class="range-input">
+                  <p class="field-hint">Higher values follow buyer, seller, contact, about, and team links deeper.</p>
                 </div>
                 <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
                   <div>
@@ -288,6 +289,7 @@
                 <div class="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] font-semibold text-emerald-800">
                   <i class="fa-solid fa-robot" aria-hidden="true"></i>
                   robots.txt is always respected. Request rate limits apply per domain.
+                  Login-protected pages are skipped; access controls are never bypassed.
                 </div>
               </div>
             </details>

@@ -194,3 +194,72 @@ def test_registrable_domain_handles_multi_label_suffixes():
     assert registrable_domain("careers.example.com") == "example.com"
     assert registrable_domain("example.org") == "example.org"
     assert registrable_domain("sub.example.com.au") == "example.com.au"
+
+
+@pytest.mark.asyncio
+async def test_crawl_follows_links_from_contact_pages_for_depth():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n", headers={"content-type": "text/plain"})
+        pages = {
+            "/": '<a href="/contact-us">Contact</a>',
+            "/contact-us": '<a href="/our-team">Team</a><p>hello@acme.org</p>',
+            "/our-team": '<p>team@acme.org</p>',
+        }
+        body = pages.get(request.url.path)
+        if body is None:
+            return httpx.Response(404)
+        return httpx.Response(200, text=body, headers={"content-type": "text/html"})
+
+    async with await make_client(handler) as client:
+        crawler = Crawler(client, CrawlConfig(rate_limit_seconds=0, max_pages_per_domain=3))
+        site = await crawler.crawl_site(CrawlTarget(url="https://example.com/", domain="example.com"))
+
+    assert site.pages_crawled == 3
+    assert {email.email for email in site.emails} == {"hello@acme.org", "team@acme.org"}
+    team = next(email for email in site.emails if email.email == "team@acme.org")
+    assert team.source_url == "https://example.com/our-team"
+
+
+@pytest.mark.asyncio
+async def test_crawl_reports_authentication_wall_without_bypassing_it():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n", headers={"content-type": "text/plain"})
+        return httpx.Response(401, text="login required")
+
+    async with await make_client(handler) as client:
+        crawler = Crawler(client, CrawlConfig(rate_limit_seconds=0, retries=0))
+        site = await crawler.crawl_site(CrawlTarget(url="https://example.com/", domain="example.com"))
+
+    assert site.auth_required == 1
+    assert site.pages_crawled == 0
+    assert any("Authentication required" in error for error in site.errors)
+
+
+@pytest.mark.asyncio
+async def test_crawl_prioritises_buyer_and_seller_pages():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n", headers={"content-type": "text/plain"})
+        pages = {
+            "/": (
+                '<a href="/about-us">About</a>'
+                '<a href="/buyers">Buyers</a>'
+                '<a href="/sellers">Sellers</a>'
+            ),
+            "/buyers": '<p>buyer@acme.org</p>',
+            "/sellers": '<p>seller@acme.org</p>',
+            "/about-us": '<p>about@acme.org</p>',
+        }
+        body = pages.get(request.url.path)
+        if body is None:
+            return httpx.Response(404)
+        return httpx.Response(200, text=body, headers={"content-type": "text/html"})
+
+    async with await make_client(handler) as client:
+        crawler = Crawler(client, CrawlConfig(rate_limit_seconds=0, max_pages_per_domain=3))
+        site = await crawler.crawl_site(CrawlTarget(url="https://example.com/", domain="example.com"))
+
+    assert {email.email for email in site.emails} == {"buyer@acme.org", "seller@acme.org"}
+    assert all(email.source_url in {"https://example.com/buyers", "https://example.com/sellers"} for email in site.emails)
