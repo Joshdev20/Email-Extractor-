@@ -579,6 +579,28 @@ def build_search_queries(spec: QuerySpec) -> list[str]:
     return queries[:4]
 
 
+def build_places_queries(spec: QuerySpec) -> list[str]:
+    """Build natural-language Places queries; Text Search does not support operators."""
+    location = (spec.location_label or "").strip()
+    industry = (spec.industry or "").strip()
+    if not industry:
+        base = "businesses"
+        return [f"{base} in {location}" if location else base]
+
+    lowered = industry.lower()
+    if lowered.endswith(("company", "companies", "agency", "agencies")):
+        terms = [industry]
+    else:
+        terms = [f"{industry} companies", f"{industry} agency", f"{industry} services"]
+
+    queries: list[str] = []
+    for term in terms:
+        query = f"{term} in {location}" if location else term
+        if query not in queries:
+            queries.append(query)
+    return queries[:3]
+
+
 def parse_query(raw: str, *, overrides: dict[str, Any] | None = None) -> QuerySpec:
     text = re.sub(r"\s+", " ", (raw or "").strip())
     lower = text.lower()
@@ -820,73 +842,95 @@ class GoogleSearch:
             raise SearchConfigError(
                 "Google Places is not configured. Set GOOGLE_PLACES_API_KEY."
             )
+        max_results = min(max(max_results, 1), 60)
         headers = {
             "X-Goog-Api-Key": self.config.places_api_key,
             "X-Goog-FieldMask": (
                 "places.displayName,places.websiteUri,places.formattedAddress,"
-                "places.primaryTypeDisplayName"
+                "places.primaryTypeDisplayName,nextPageToken"
             ),
             "Content-Type": "application/json",
         }
-        body = {
-            "textQuery": query,
-            "maxResultCount": min(max(max_results, 1), 20),
-            "languageCode": "en",
-        }
-        try:
-            response = await self.client.post(
-                PLACES_ENDPOINT, headers=headers, json=body, timeout=20.0
-            )
-        except httpx.HTTPError as exc:
-            raise SearchError(f"Google Places request failed ({exc.__class__.__name__})") from exc
+        results: list[SearchResult] = []
+        seen: set[str] = set()
+        page_token: str | None = None
+        pages = 0
 
-        if response.status_code != 200:
+        while len(results) < max_results and pages < 3:
+            pages += 1
+            body: dict[str, Any] = {
+                "textQuery": query,
+                "pageSize": min(20, max_results - len(results)),
+                "languageCode": "en",
+            }
+            if page_token:
+                body["pageToken"] = page_token
+            try:
+                response = await self.client.post(
+                    PLACES_ENDPOINT, headers=headers, json=body, timeout=20.0
+                )
+            except httpx.HTTPError as exc:
+                raise SearchError(
+                    f"Google Places request failed ({exc.__class__.__name__})"
+                ) from exc
+
+            if response.status_code != 200:
+                try:
+                    payload = response.json()
+                except ValueError:
+                    payload = {}
+                error = payload.get("error") if isinstance(payload, dict) else None
+                message = ""
+                status = ""
+                if isinstance(error, dict):
+                    message = str(error.get("message", ""))
+                    status = str(error.get("status", ""))
+                if response.status_code == 429 or status == "RESOURCE_EXHAUSTED":
+                    raise SearchQuotaError(
+                        "Google Places quota or rate limit exceeded. Check your billing "
+                        "and Places API quotas."
+                    )
+                if response.status_code in (401, 403):
+                    raise SearchConfigError(
+                        f"Google Places access was denied: "
+                        f"{message or 'check GOOGLE_PLACES_API_KEY'}. "
+                        "Enable Places API (New) in the key's project, allow "
+                        "places.googleapis.com on the key, and attach billing or use a "
+                        "Maps Demo Key."
+                    )
+                raise SearchError(f"Google Places search failed (HTTP {response.status_code}).")
+
             try:
                 payload = response.json()
-            except ValueError:
-                payload = {}
-            error = payload.get("error") if isinstance(payload, dict) else None
-            message = ""
-            status = ""
-            if isinstance(error, dict):
-                message = str(error.get("message", ""))
-                status = str(error.get("status", ""))
-            if response.status_code == 429 or status == "RESOURCE_EXHAUSTED":
-                raise SearchQuotaError(
-                    "Google Places quota or rate limit exceeded. Check your billing "
-                    "and Places API quotas."
-                )
-            if response.status_code in (401, 403):
-                raise SearchConfigError(
-                    f"Google Places access was denied: {message or 'check GOOGLE_PLACES_API_KEY'}. "
-                    "Enable Places API (New) in the key's project, allow "
-                    "places.googleapis.com on the key, and attach billing or use a "
-                    "Maps Demo Key."
-                )
-            raise SearchError(f"Google Places search failed (HTTP {response.status_code}).")
+            except ValueError as exc:
+                raise SearchError("Google Places returned an invalid response") from exc
 
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise SearchError("Google Places returned an invalid response") from exc
-        results: list[SearchResult] = []
-        for place in payload.get("places") or []:
-            website = str(place.get("websiteUri", "")).strip()
-            if not website.startswith(("http://", "https://")):
-                continue
-            domain = _domain_of(website)
-            if not domain:
-                continue
-            name = place.get("displayName") or {}
-            title = name.get("text", "") if isinstance(name, dict) else ""
-            results.append(SearchResult(
-                url=website,
-                domain=domain,
-                title=str(title)[:200],
-                snippet=str(place.get("formattedAddress", ""))[:400],
-                source="places",
-                kind="company",
-            ))
+            places = payload.get("places") or []
+            for place in places:
+                website = str(place.get("websiteUri", "")).strip()
+                if not website.startswith(("http://", "https://")):
+                    continue
+                domain = _domain_of(website)
+                if not domain or domain in seen:
+                    continue
+                seen.add(domain)
+                name = place.get("displayName") or {}
+                title = name.get("text", "") if isinstance(name, dict) else ""
+                results.append(SearchResult(
+                    url=website,
+                    domain=domain,
+                    title=str(title)[:200],
+                    snippet=str(place.get("formattedAddress", ""))[:400],
+                    source="places",
+                    kind="company",
+                ))
+                if len(results) >= max_results:
+                    break
+
+            page_token = str(payload.get("nextPageToken") or "").strip() or None
+            if not page_token:
+                break
+
         return results
 
 
@@ -968,19 +1012,23 @@ async def discover_websites(
             errors.append(str(exc))
 
     if use_places and config.places_ready and len(by_domain) < limit:
-        try:
-            location = spec.location_label or ""
-            industry = spec.industry or "businesses"
-            places_query = f"{industry} in {location}".strip() if location else industry
-            results = await search.places_search(places_query, max_results=20)
-            for result in results:
-                add(result)
-            discovery.providers.append("google_places")
-        except SearchQuotaError as exc:
-            quota_hit = True
-            errors.append(str(exc))
-        except (SearchConfigError, SearchError) as exc:
-            errors.append(str(exc))
+        for places_query in build_places_queries(spec):
+            if len(by_domain) >= limit:
+                break
+            try:
+                remaining = max(1, min(60, limit - len(by_domain)))
+                results = await search.places_search(places_query, max_results=remaining)
+                for result in results:
+                    add(result)
+                if results and "google_places" not in discovery.providers:
+                    discovery.providers.append("google_places")
+            except SearchQuotaError as exc:
+                quota_hit = True
+                errors.append(str(exc))
+                break
+            except (SearchConfigError, SearchError) as exc:
+                errors.append(str(exc))
+                break
 
     if not discovery.websites:
         discovery.websites = sorted(by_domain.values(), key=lambda w: (-w.score, w.domain))

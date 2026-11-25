@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -10,6 +12,7 @@ from backend.search_engine import (
     SearchConfigError,
     SearchError,
     SearchQuotaError,
+    build_places_queries,
     build_search_queries,
     discover_websites,
     parse_query,
@@ -155,6 +158,15 @@ def test_parse_query_overrides():
     assert spec.target_websites == 3
 
 
+def test_build_places_queries_uses_company_agency_and_services_variants():
+    spec = parse_query("Find real estate companies in the United Kingdom")
+    assert build_places_queries(spec) == [
+        "real estate companies in United Kingdom",
+        "real estate agency in United Kingdom",
+        "real estate services in United Kingdom",
+    ]
+
+
 def test_build_search_queries_uses_site_operators_for_domains():
     spec = parse_query("extract emails from example.com")
     queries = build_search_queries(spec)
@@ -214,6 +226,32 @@ async def test_places_search_success():
     assert results[0].source == "places"
     assert results[0].domain == "acme.com"
     assert fake.places_requests[0].headers["x-goog-api-key"] == "places-key"
+
+
+@pytest.mark.asyncio
+async def test_places_search_follows_page_token():
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        body = json.loads(request.content)
+        if body.get("pageToken") == "next":
+            return httpx.Response(200, json={"places": [{
+                "displayName": {"text": "Beta"},
+                "websiteUri": "https://beta.example",
+            }]})
+        return httpx.Response(200, json={
+            "places": [{
+                "displayName": {"text": "Alpha"},
+                "websiteUri": "https://alpha.example",
+            }],
+            "nextPageToken": "next",
+        })
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        results = await GoogleSearch(client, CONFIG).places_search("test", max_results=2)
+    assert [result.domain for result in results] == ["alpha.example", "beta.example"]
+    assert json.loads(requests[1].content)["pageToken"] == "next"
 
 
 @pytest.mark.asyncio

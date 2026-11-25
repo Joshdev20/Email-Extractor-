@@ -181,9 +181,11 @@ blank.
 ### Quotas and pricing
 
 - Places API (New) is usage-billed. Text Search returns up to 20 places per
-  call. LeadScope requests no more than the remaining website target. The
-  `places.websiteUri` field is in the Text Search Enterprise SKU, so check the
-  current [Places pricing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing)
+  page and up to 60 per query. LeadScope follows page tokens up to 60 results
+  and may issue up to three query variants (companies, agency, services),
+  stopping as soon as the website target is met. The `places.websiteUri` field
+  is in the Text Search Enterprise SKU, so check the current
+  [Places pricing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing)
   before production use.
 - A Maps Demo Key has no billing but a limited daily quota. It is intended for
   prototyping.
@@ -414,14 +416,14 @@ Run the JavaScript export tests:
 node --test tests/export.test.js
 ```
 
-Current results in this environment: **102 Python tests passed** and **6 Node
+Current results in this environment: **104 Python tests passed** and **6 Node
 tests passed**.
 
 Coverage includes:
 
 - natural-language parsing examples and overrides
-- Google CSE/Places request parameters, deduplication, ranking, quota and
-  configuration errors
+- Google CSE/Places request parameters, Places pagination and query variants,
+  deduplication, ranking, quota and configuration errors
 - crawling fixtures, robots allow/disallow/failure, link priority, page caps,
   source attribution, deduplication, cancellation, and bulk isolation
 - email extraction methods (text, mailto, attributes, JSON-LD, obfuscation),
