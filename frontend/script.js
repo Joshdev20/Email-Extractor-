@@ -710,7 +710,7 @@
 
   function syncBatchSize() {
     const configured = Number(state.config && state.config.sync_batch_size);
-    return Number.isFinite(configured) ? Math.max(3, Math.min(50, configured)) : 10;
+    return Number.isFinite(configured) ? Math.max(3, Math.min(50, configured)) : 6;
   }
 
   function targetDomain(value) {
