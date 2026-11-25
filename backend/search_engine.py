@@ -82,6 +82,30 @@ CATEGORY_QUERY_LABELS = {
     "general": "info",
 }
 
+# Brand categories need a relevance gate. Google Places can return a business
+# that merely matches the words "supplier" or "partner"; without this gate the
+# crawler can collect unrelated emails. Each entry is:
+# (category marker, matching terms, official seed domains).
+_CATEGORY_RELEVANCE: tuple[
+    tuple[str, tuple[str, ...], tuple[str, ...]], ...
+] = (
+    ("alibaba", ("alibaba", "aliexpress"), ("alibaba.com", "alibabagroup.com", "alibabacloud.com")),
+    ("adobe", ("adobe", "creative cloud", "acrobat"), ("adobe.com",)),
+    ("microsoft teams", ("microsoft teams", "teams"), ("microsoft.com",)),
+    ("microsoft 365", ("microsoft 365", "office 365", "microsoft"), ("microsoft.com",)),
+    ("office 365", ("office 365", "microsoft 365", "microsoft"), ("microsoft.com",)),
+    ("salesforce", ("salesforce",), ("salesforce.com",)),
+    ("hubspot", ("hubspot",), ("hubspot.com",)),
+    ("shopify", ("shopify",), ("shopify.com",)),
+    ("aws", ("aws", "amazon web services"), ("aws.amazon.com",)),
+    ("google workspace", ("google workspace", "g suite", "google"), ("workspace.google.com",)),
+    ("sap", ("sap",), ("sap.com",)),
+    ("oracle", ("oracle",), ("oracle.com",)),
+    ("cisco", ("cisco",), ("cisco.com",)),
+    ("zoom", ("zoom",), ("zoom.us",)),
+    ("slack", ("slack",), ("slack.com",)),
+)
+
 
 @dataclass(slots=True)
 class GoogleConfig:
@@ -714,6 +738,50 @@ def _kind_of(domain: str) -> str:
     return "company"
 
 
+def _category_relevance(industry: str | None) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    normalized = re.sub(r"\s+", " ", (industry or "").strip().lower())
+    if not normalized:
+        return None
+    for marker, terms, seed_domains in _CATEGORY_RELEVANCE:
+        if marker in normalized:
+            return terms, seed_domains
+    return None
+
+
+def _category_matches(result: SearchResult, relevance: tuple[tuple[str, ...], tuple[str, ...]]) -> bool:
+    terms, seed_domains = relevance
+    domain = result.domain.lower().removeprefix("www.")
+    for seed in seed_domains:
+        if domain == seed or domain.endswith(f".{seed}") or seed.endswith(f".{domain}"):
+            return True
+    haystack = f"{result.url} {result.title} {result.snippet}".lower()
+    return any(
+        re.search(rf"(?<![\w]){re.escape(term)}(?![\w])", haystack)
+        for term in terms
+    )
+
+
+def _category_seed_results(
+    industry: str,
+    relevance: tuple[tuple[str, ...], tuple[str, ...]],
+) -> list[SearchResult]:
+    _, seed_domains = relevance
+    seeds: list[SearchResult] = []
+    for seed in seed_domains:
+        url = f"https://{seed}"
+        domain = _domain_of(url) or seed
+        seeds.append(SearchResult(
+            url=url,
+            domain=domain,
+            title=f"{industry} - official website",
+            snippet="Category seed used because Google returned no matching category websites.",
+            source="category_seed",
+            kind="company",
+            score=95.0,
+        ))
+    return seeds
+
+
 def _rank_website(url: str, title: str, snippet: str, spec: QuerySpec, source: str) -> float:
     domain = _domain_of(url)
     score = 50.0
@@ -996,10 +1064,13 @@ async def discover_websites(
     errors: list[str] = []
     quota_hit = False
     cse_calls = 0
+    category_relevance = _category_relevance(spec.industry)
     gl = _country_gl(spec.country_code) if spec.country_code else None
     cr = f"country{spec.country_code}" if spec.country_code else None
 
     def add(result: SearchResult) -> None:
+        if category_relevance and not _category_matches(result, category_relevance):
+            return
         key = registrable_domain(result.domain) or result.domain
         result.score = _rank_website(result.url, result.title, result.snippet, spec, result.source)
         existing = by_domain.get(key)
@@ -1052,10 +1123,18 @@ async def discover_websites(
                 errors.append(str(exc))
                 break
 
-    if not discovery.websites:
-        discovery.websites = sorted(by_domain.values(), key=lambda w: (-w.score, w.domain))
-    else:
-        discovery.websites = sorted(by_domain.values(), key=lambda w: (-w.score, w.domain))
+    if category_relevance and not by_domain and not errors:
+        seeds = _category_seed_results(spec.industry or "category", category_relevance)
+        for seed in seeds:
+            by_domain[seed.domain] = seed
+        if seeds:
+            discovery.providers.append("category_seed")
+            discovery.warnings.append(
+                f"Google returned no websites matching {spec.industry}. "
+                "Using the official category website so results stay on topic."
+            )
+
+    discovery.websites = sorted(by_domain.values(), key=lambda w: (-w.score, w.domain))
     discovery.websites = discovery.websites[:limit]
     discovery.warnings.extend(errors)
 

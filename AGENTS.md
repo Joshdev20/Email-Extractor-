@@ -31,7 +31,10 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
   `QuerySpec` parser (keyword based, not an LLM), domain ranking. Platform
   categories such as Alibaba suppliers, Adobe 365 partners, Microsoft Teams
   consultants, Microsoft 365 partners, Salesforce, AWS, and Google Workspace
-  are recognized before the generic software pattern.
+  are recognized before the generic software pattern. Brand-category discovery
+  is relevance-gated in `_CATEGORY_RELEVANCE` / `_category_matches`; if Google
+  returns only unrelated businesses, `category_seed` uses official domains so
+  Alibaba results stay Alibaba-related.
 - `backend/crawler.py` - async crawler, robots.txt, link priority, per-domain
   limits/rate limiting, cancellation, result aggregation.
 - `backend/email_extractor.py` - regex/BeautifulSoup extraction, obfuscated

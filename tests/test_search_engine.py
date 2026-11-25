@@ -415,3 +415,31 @@ async def test_discover_respects_limit():
     async with await make_client(fake) as client:
         discovery = await discover_websites(client, spec, CONFIG, limit=3, use_places=False, max_cse_calls=1)
     assert len(discovery.websites) == 3
+
+
+@pytest.mark.asyncio
+async def test_discover_brand_category_filters_unrelated_places_results():
+    fake = FakeGoogle(places=[
+        {"displayName": {"text": "Alibaba Verified Supplier"}, "websiteUri": "https://supplier.example"},
+        {"displayName": {"text": "Random Marketing Agency"}, "websiteUri": "https://random.example"},
+    ])
+    config = GoogleConfig(api_key="", cse_id="", places_api_key="places-key")
+    spec = parse_query("Find Alibaba suppliers in Canada.")
+    async with await make_client(fake) as client:
+        discovery = await discover_websites(client, spec, config, limit=10, use_places=True)
+    assert [website.domain for website in discovery.websites] == ["supplier.example"]
+    assert "category_seed" not in discovery.providers
+
+
+@pytest.mark.asyncio
+async def test_discover_brand_category_uses_official_seed_when_unrelated():
+    fake = FakeGoogle(places=[
+        {"displayName": {"text": "Random Marketing Agency"}, "websiteUri": "https://random.example"},
+    ])
+    config = GoogleConfig(api_key="", cse_id="", places_api_key="places-key")
+    spec = parse_query("Find Alibaba suppliers in Canada.")
+    async with await make_client(fake) as client:
+        discovery = await discover_websites(client, spec, config, limit=10, use_places=True)
+    assert {website.domain for website in discovery.websites} == {"alibaba.com", "alibabagroup.com", "alibabacloud.com"}
+    assert "category_seed" in discovery.providers
+    assert any("official category website" in warning for warning in discovery.warnings)

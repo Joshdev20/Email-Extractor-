@@ -20,7 +20,11 @@ storage**. Active jobs live in Python memory. Browser history lives in
   Salesforce, HubSpot, Shopify, AWS, Google Workspace, SAP, Oracle, Cisco,
   Zoom, Slack, IT services, SaaS, cloud, cybersecurity, and common industries.
   Choosing a preset fills both the industry field and a ready-to-run search
-  description.
+  description. Brand presets are constrained: Google results must match the
+  category name or an approved brand domain. If discovery finds no matching
+  site, LeadScope falls back to the official brand site (for Alibaba:
+  `alibaba.com`, `alibabagroup.com`, and `alibabacloud.com`) instead of
+  crawling unrelated businesses.
 - Google Places API (New) business discovery, with optional Custom Search
   JSON API support for existing customers.
 - Async Python crawler with `robots.txt`, link prioritisation, per-domain page
