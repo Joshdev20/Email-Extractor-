@@ -102,7 +102,7 @@ class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     query: Annotated[str, Field(min_length=3, max_length=1000)]
-    max_results: Annotated[int, Field(default=20, ge=1, le=100)] = 20
+    max_results: Annotated[int, Field(default=20, ge=1, le=200)] = 20
     use_places: bool = True
     settings: ExtractionSettings = Field(default_factory=ExtractionSettings)
 

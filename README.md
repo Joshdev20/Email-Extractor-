@@ -101,11 +101,12 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `MAX_CONCURRENT_JOBS` | No | Concurrent extraction jobs, default `3` |
 | `MAX_JOB_SECONDS` | No | Hard job timeout, default `1800` |
 | `SYNC_EXTRACTION` | No | Set `1` to run each extraction inside one request; Vercel sets this automatically |
-| `SYNC_MAX_SECONDS` | No | Timeout for a synchronous request, default `55` |
+| `SYNC_MAX_SECONDS` | No | Timeout for one synchronous request, default `55` |
+| `SYNC_BATCH_SIZE` | No | Websites per browser-orchestrated sync batch, default `10` |
 | `JOB_TTL_SECONDS` | No | In-memory job retention, default `900` |
 | `MAX_RETAINED_JOBS` | No | Maximum retained job snapshots, default `50` |
 | `RATE_LIMIT_PER_MINUTE` | No | General per-client request limit, default `120` |
-| `EXTRACTION_RATE_LIMIT` | No | Extraction POSTs per minute per client, default `12` |
+| `EXTRACTION_RATE_LIMIT` | No | Extraction POSTs per minute per client, default `60`; batching needs more than one request |
 | `CRAWL_RATE_LIMIT_SECONDS` | No | Minimum delay between requests to one domain, default `0.75` |
 | `TRUST_PROXY` | No | Set `1` only behind a trusted reverse proxy |
 | `HTTPX_TRUST_ENV` | No | Set `1` to let httpx use proxy environment variables |
@@ -140,19 +141,21 @@ The repository includes a Vercel entrypoint and static routing:
    `"google_places_configured": true`.
 
 Vercel uses the synchronous extraction path. `/api/config` returns
-`"sync_extraction": true`, and the browser posts to `/api/extract-sync`. The
-function runs discovery and crawling inside one HTTP request and returns the
-results directly. This is necessary because a serverless function cannot keep
-an in-memory background job alive after it sends a response.
+`"sync_extraction": true` and `"sync_batch_size": 10`. The browser first asks
+`/api/search` for company websites, then sends bounded batches of those websites
+to `/api/extract-sync`. It merges the batch results locally, removes duplicates,
+and keeps the completed set in the browser. This is necessary because a
+serverless function cannot keep an in-memory background job alive after it sends
+a response.
 
 `vercel.json` uses the legacy `builds` format for the Python function and the
 static frontend. Vercel rejects a `functions` block in the same file, so set the
 function duration in **Vercel → Project → Settings → Functions → Max Duration**
-(for example, 60 seconds). Vercel plan limits still apply. If the 55-second
-internal budget is reached, the API returns the emails already found with
-`"partial": true` and a warning instead of discarding them. Large jobs should
-run on the local async server, where the UI uses SSE and `/api/extract`. No job
-state is shared between Vercel invocations, and no database is used.
+(for example, 60 seconds). Vercel plan limits still apply. If one batch reaches
+the 55-second internal budget, the API returns the emails already found with
+`"partial": true` and a warning instead of discarding them. The browser continues
+with the remaining batches, so a 500-email target can span several requests.
+No job state is shared between Vercel invocations, and no database is used.
 
 ---
 

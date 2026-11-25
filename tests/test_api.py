@@ -80,6 +80,7 @@ def test_health_and_config(api_client):
     assert body["robots_respected"] is True
     assert body["runtime"] in {"local", "vercel"}
     assert isinstance(body["sync_extraction"], bool)
+    assert 3 <= body["sync_batch_size"] <= 50
 
 
 def test_parse_query_endpoint(api_client):

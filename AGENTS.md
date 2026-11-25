@@ -41,10 +41,12 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 - `api/index.py` - Vercel `mangum` entrypoint. `vercel.json` serves `frontend/`
   statically and routes `/api/*` to the function.
 - On Vercel (`VERCEL` env is set), `/api/config` returns
-  `sync_extraction: true`. The frontend then calls `/api/extract-sync`, which
-  runs discovery and crawling inside one request because serverless functions
-  cannot keep in-memory background jobs alive. Local mode keeps async jobs and
-  SSE.
+  `sync_extraction: true` and `sync_batch_size: 10`. For natural-language
+  queries the frontend calls `/api/search`, splits the discovered websites into
+  batches, calls `/api/extract-sync` once per batch, and merges the results in
+  the browser. Manual domain lists are batched directly. Serverless functions
+  cannot keep in-memory background jobs alive, so this batching is what allows
+  large targets. Local mode keeps async jobs and SSE.
 
 ## Google API availability
 

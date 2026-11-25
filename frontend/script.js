@@ -385,6 +385,13 @@
   }
 
   async function runSyncExtraction(input) {
+    if (state.mode === "single") {
+      return runSingleSyncExtraction(input);
+    }
+    return runBatchedSyncExtraction(input);
+  }
+
+  async function runSingleSyncExtraction(input) {
     const controller = new AbortController();
     state.syncAbort = controller;
     let synthetic = 8;
@@ -459,6 +466,311 @@
     } finally {
       state.syncAbort = null;
     }
+  }
+
+  async function runBatchedSyncExtraction(input) {
+    const controller = new AbortController();
+    state.syncAbort = controller;
+    let synthetic = 6;
+    const timer = window.setInterval(() => {
+      synthetic = Math.min(90, synthetic + 2);
+      const current = Number.parseFloat(el.progressBar.style.width) || 0;
+      if (current < synthetic) {
+        el.progressBar.style.width = `${synthetic}%`;
+        el.progressBarWrap.setAttribute("aria-valuenow", String(synthetic));
+        el.progressPercent.textContent = `${synthetic}%`;
+      }
+    }, 2000);
+
+    const aggregate = emptyStats();
+    const results = [];
+    const websites = [];
+    const warnings = [];
+    const errors = [];
+    let parsed = null;
+    let targetEmails = null;
+    let targetWebsites = 0;
+    let hadPartial = false;
+    let hadFailure = false;
+    let cancelled = false;
+
+    el.progressMessage.textContent = "Preparing serverless batches";
+    el.progressCurrentDomain.textContent = "The browser will combine several bounded API requests";
+
+    try {
+      let targets = [];
+      const settings = { ...input.payload.settings };
+
+      if (state.mode === "nl") {
+        el.progressMessage.textContent = "Discovering business websites";
+        const plan = await api("/api/parse-query", {
+          method: "POST",
+          body: JSON.stringify({ query: input.payload.query, settings }),
+          signal: controller.signal
+        });
+        parsed = plan.parsed || null;
+        const discoveryLimit = Math.min(
+          200,
+          Math.max(1, Number(parsed && parsed.target_websites) || Number(settings.target_websites) || 25)
+        );
+        const discovery = await api("/api/search", {
+          method: "POST",
+          body: JSON.stringify({
+            query: input.payload.query,
+            settings,
+            max_results: discoveryLimit,
+            use_places: settings.use_places !== false
+          }),
+          signal: controller.signal
+        });
+        parsed = discovery.parsed || parsed;
+        targets = dedupeBatchTargets((discovery.websites || []).map((website) => ({
+          ...website,
+          domain: website.domain || targetDomain(website.url),
+          url: website.url || `https://${targetDomain(website.domain)}`
+        })));
+        appendUnique(warnings, discovery.warnings || []);
+        if (!targets.length) throw new Error("No websites were discovered for this search.");
+      } else {
+        const payload = input.payload || {};
+        const items = [];
+        (payload.domains || []).forEach((domain) => {
+          items.push({
+            domain,
+            url: /^https?:\/\//i.test(domain) ? domain : `https://${domain}`,
+            source: "provided",
+            title: domain
+          });
+        });
+        (payload.urls || []).forEach((url) => {
+          const domain = targetDomain(url);
+          items.push({ domain, url, source: "provided", title: domain });
+        });
+        targets = dedupeBatchTargets(items);
+        if (!targets.length) throw new Error("No valid websites were provided.");
+      }
+
+      targetEmails = Number(parsed && parsed.target_emails) || Number(settings.target_emails) || null;
+      targetWebsites = Number(parsed && parsed.target_websites) || Number(settings.target_websites) || targets.length;
+      aggregate.websites_discovered = targets.length;
+      aggregate.target_emails = targetEmails || 0;
+      aggregate.target_websites = targetWebsites;
+      websites.push(...targets);
+      state.parsed = parsed;
+      state.websites = websites;
+      renderProgressStats(aggregate);
+      renderProgressWebsites(websites);
+
+      const batchSize = syncBatchSize();
+      const batches = [];
+      for (let offset = 0; offset < targets.length; offset += batchSize) {
+        batches.push(targets.slice(offset, offset + batchSize));
+      }
+
+      for (let index = 0; index < batches.length; index += 1) {
+        if (controller.signal.aborted) {
+          cancelled = true;
+          break;
+        }
+        if (targetEmails && results.length >= targetEmails) break;
+
+        const batch = batches[index];
+        const remaining = targetEmails ? Math.max(1, targetEmails - results.length) : null;
+        const percent = Math.min(95, 8 + Math.round(((index + 1) / batches.length) * 87));
+        el.progressBar.style.width = `${percent}%`;
+        el.progressBarWrap.setAttribute("aria-valuenow", String(percent));
+        el.progressPercent.textContent = `${percent}%`;
+        el.progressMessage.textContent = `Crawling batch ${index + 1} of ${batches.length}`;
+        el.progressCurrentDomain.textContent = `${formatNumber(results.length)} unique email(s) so far`;
+
+        const batchSettings = {
+          ...settings,
+          target_emails: remaining,
+          target_websites: batch.length,
+          use_places: false
+        };
+
+        let data;
+        try {
+          data = await api("/api/extract-sync", {
+            method: "POST",
+            body: JSON.stringify({
+              urls: batch.map((target) => target.url),
+              settings: batchSettings
+            }),
+            signal: controller.signal
+          });
+        } catch (error) {
+          if (error.name === "AbortError") {
+            cancelled = true;
+            break;
+          }
+          hadFailure = true;
+          appendError(errors, `batch ${index + 1}`, error.message);
+          if (error.status === 429) break;
+          continue;
+        }
+
+        if (data.state === "error") {
+          hadFailure = true;
+          (data.errors || []).forEach((item) => appendError(errors, item.scope || `batch ${index + 1}`, item.message));
+        } else if (data.partial) {
+          hadPartial = true;
+        }
+
+        state.jobId = data.job_id || state.jobId;
+        mergeBatchData(data, aggregate, results, websites);
+        appendUnique(warnings, data.warnings || []);
+        (data.errors || []).forEach((item) => appendError(errors, item.scope || `batch ${index + 1}`, item.message));
+        state.results = results.slice();
+        state.stats = { ...aggregate, unique_emails: results.length };
+        renderProgressStats(state.stats);
+        renderProgressWebsites(websites);
+        renderProgressIssues(warnings, errors);
+        renderResults();
+        if (results.length) {
+          el.results.classList.remove("hidden");
+        }
+      }
+
+      window.clearInterval(timer);
+      aggregate.unique_emails = results.length;
+      aggregate.duplicates_removed = Math.max(0, Number(aggregate.emails_discovered) - results.length);
+      aggregate.target_reached = Boolean(targetEmails && results.length >= targetEmails);
+      aggregate.websites_discovered = Math.max(Number(aggregate.websites_discovered), targets.length);
+      aggregate.target_emails = targetEmails || 0;
+      aggregate.target_websites = targetWebsites;
+      state.stats = aggregate;
+      state.results = results.sort((a, b) => String(a.email).localeCompare(String(b.email)));
+      state.websites = websites;
+      state.selected.clear();
+      state.visibleCount = PAGE_STEP;
+
+      const partial = !aggregate.target_reached && (hadPartial || (hadFailure && results.length > 0));
+      el.progressBar.style.width = "100%";
+      el.progressBarWrap.setAttribute("aria-valuenow", "100");
+      el.progressPercent.textContent = "100%";
+      el.progressCurrentDomain.textContent = `${formatNumber(results.length)} unique email(s) from ${formatNumber(aggregate.websites_crawled)} website(s)`;
+
+      if (cancelled) {
+        el.progressMessage.textContent = "Extraction cancelled";
+        setProgressState("cancelled");
+        if (results.length) addHistory();
+        toast("Extraction cancelled", "Partial results were kept in this session.", "warning");
+      } else if (partial) {
+        el.progressMessage.textContent = `Partial extraction: ${formatNumber(results.length)} unique email(s) from ${formatNumber(aggregate.websites_crawled)} website(s)`;
+        warnings.push("Some batches did not finish. The results shown are partial.");
+        setProgressState("partial");
+        if (results.length) addHistory();
+        toast("Partial results", el.progressMessage.textContent, "warning");
+      } else if (results.length) {
+        el.progressMessage.textContent = `Extraction complete: ${formatNumber(results.length)} unique email(s) from ${formatNumber(aggregate.websites_crawled)} website(s)`;
+        if (targetEmails && !aggregate.target_reached) {
+          warnings.push(`Only ${formatNumber(results.length)} of ${formatNumber(targetEmails)} requested emails were found.`);
+        }
+        setProgressState("done");
+        addHistory();
+        toast("Extraction complete", `${formatNumber(results.length)} unique email(s) from ${formatNumber(aggregate.websites_crawled)} website(s).`, "success");
+      } else {
+        el.progressMessage.textContent = hadFailure ? "Extraction failed" : "No publicly listed emails were found";
+        setProgressState(hadFailure ? "error" : "done");
+        if (hadFailure) {
+          toast("Extraction failed", errors.length ? errors[errors.length - 1].message : "No batch completed successfully.", "error");
+        } else {
+          warnings.push("No publicly listed email addresses were found. Try more websites, a different location, or a broader industry.");
+          toast("No emails found", "Try a broader query or add websites manually.", "warning");
+        }
+      }
+
+      renderProgressStats(aggregate);
+      renderProgressWebsites(websites);
+      renderProgressIssues(warnings, errors);
+      renderResults();
+      if (state.results.length) {
+        el.results.classList.remove("hidden");
+        el.results.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      setBusy(false);
+    } catch (error) {
+      window.clearInterval(timer);
+      setBusy(false);
+      if (error.name === "AbortError") {
+        setProgressState("cancelled");
+        el.progressMessage.textContent = "Extraction cancelled";
+        toast("Extraction cancelled", "The request was stopped in this browser.", "warning");
+        return;
+      }
+      showProgressError(error.message);
+      toast("Extraction failed", error.message, "error");
+    } finally {
+      window.clearInterval(timer);
+      state.syncAbort = null;
+    }
+  }
+
+  function syncBatchSize() {
+    const configured = Number(state.config && state.config.sync_batch_size);
+    return Number.isFinite(configured) ? Math.max(3, Math.min(50, configured)) : 10;
+  }
+
+  function targetDomain(value) {
+    const text = String(value || "").trim();
+    try {
+      return new URL(text.includes("://") ? text : `https://${text}`).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return text.toLowerCase().replace(/^www\./, "").replace(/\/.*$/, "");
+    }
+  }
+
+  function dedupeBatchTargets(items) {
+    const seen = new Set();
+    return (items || []).filter((item) => {
+      const domain = targetDomain(item.domain || item.url);
+      if (!domain || seen.has(domain)) return false;
+      seen.add(domain);
+      item.domain = domain;
+      if (!item.url) item.url = `https://${domain}`;
+      return true;
+    });
+  }
+
+  function appendUnique(list, values) {
+    (values || []).forEach((value) => {
+      const text = String(value || "").trim();
+      if (text && !list.includes(text) && list.length < 20) list.push(text);
+    });
+  }
+
+  function appendError(list, scope, message) {
+    const text = String(message || "").trim();
+    if (!text) return;
+    const item = { scope: String(scope || "").slice(0, 120), message: text.slice(0, 240) };
+    if (list.some((existing) => existing.scope === item.scope && existing.message === item.message)) return;
+    if (list.length < 50) list.push(item);
+  }
+
+  function mergeBatchData(data, aggregate, results, websites) {
+    const seen = new Set(results.map((row) => String(row.email || "").toLowerCase()));
+    for (const row of data.results || []) {
+      const email = String(row.email || "").toLowerCase();
+      if (!email || seen.has(email)) continue;
+      seen.add(email);
+      results.push(row);
+    }
+    const stats = data.stats || {};
+    aggregate.websites_crawled += Number(stats.websites_crawled) || 0;
+    aggregate.websites_failed += Number(stats.websites_failed) || 0;
+    aggregate.pages_crawled += Number(stats.pages_crawled) || 0;
+    aggregate.pages_failed += Number(stats.pages_failed) || 0;
+    aggregate.emails_discovered += Number(stats.emails_discovered) || 0;
+    aggregate.unique_emails = results.length;
+    aggregate.duplicates_removed = Math.max(0, aggregate.emails_discovered - results.length);
+    (data.websites || []).forEach((website) => {
+      const domain = website.domain || targetDomain(website.url);
+      if (!domain || !websites.some((item) => (item.domain || targetDomain(item.url)) === domain)) {
+        websites.push(website);
+      }
+    });
   }
 
   async function previewPlan() {

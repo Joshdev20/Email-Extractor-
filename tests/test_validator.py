@@ -36,6 +36,7 @@ def test_extraction_settings_defaults_and_bounds():
 def test_search_request_validation():
     request = SearchRequest(query="Find marketing agencies in Canada")
     assert request.max_results == 20
+    assert SearchRequest(query="Find agencies", max_results=200).max_results == 200
     with pytest.raises(ValidationError):
         SearchRequest(query="ab")
     with pytest.raises(ValidationError):
