@@ -919,9 +919,10 @@ async def discover_websites(
 
     if not config.any_ready:
         raise SearchConfigError(
-            "Google search is not configured. Add GOOGLE_API_KEY and GOOGLE_CSE_ID "
-            "(and optionally GOOGLE_PLACES_API_KEY) to the backend .env file. "
-            "You can still extract emails by pasting website domains."
+            "Google search is not configured. Add GOOGLE_PLACES_API_KEY for Places "
+            "API (New), or GOOGLE_API_KEY and GOOGLE_CSE_ID for existing Custom "
+            "Search customers, to the backend .env file. You can still extract "
+            "emails by pasting website domains."
         )
 
     search = GoogleSearch(client, config)
