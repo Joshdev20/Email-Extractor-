@@ -300,7 +300,7 @@
               </summary>
               <div class="mt-4 grid gap-2">
                 <label for="authInput" class="field-label">Site access headers (optional)</label>
-                <textarea id="authInput" class="text-area" rows="3" maxlength="20000" placeholder="example.com | Cookie: session=...&#10;portal.example.com | Authorization: Bearer ..."></textarea>
+                <textarea id="authInput" class="text-area" rows="3" maxlength="20000" autocomplete="off" spellcheck="false" placeholder="example.com | Cookie: session=...&#10;portal.example.com | Authorization: Bearer ..."></textarea>
                 <p class="field-hint">One site per line: domain | Authorization: ... or Cookie: .... Credentials are kept only in memory for this run and are never saved, exported, or logged. Use only on sites you are authorized to crawl. robots.txt remains enforced.</p>
               </div>
             </details>
