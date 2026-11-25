@@ -503,19 +503,19 @@ HTTP uses `httpx.MockTransport`.
 - Form controls computed to `16px` on mobile, which prevents iOS focus zoom.
 - The Vercel `Mangum` handler returned `200` for `/api/health` and for a
   synchronous `POST /api/extract-sync` event.
-- A live 500-email browser run on Vercel used seven batched `extract-sync`
-  calls (`6, 6, 6, 6, 6, 6, 3` websites). All seven returned `200`, the browser
-  merged 41 unique emails from 30 crawled websites, the results stayed inside a
+- A live 500-email browser run on Vercel used eleven batched `extract-sync`
+  calls (`4` websites each, then `3`). All eleven returned `200`, the browser
+  merged 43 unique emails from 32 crawled websites, the results stayed inside a
   390 px viewport, and the UI reported **Partial** because one batch hit the
-  serverless time budget.
+  serverless time budget while the requested target was 500.
 
 Batching removes the single-request failure, but it cannot invent websites.
-For a broad `"Canada business email"` query, Places returned 41 company sites;
-a specific `"real estate companies in Canada"` query returned 90. A 500-email
-target still depends on how many public company websites Google can discover
-and how many emails those sites publish. Use a specific industry, add domains
-manually, or run the local async server for the longest jobs. Extraction does
-not verify deliverability.
+For a broad `"Canada business email"` query, Places returned about 41 company
+sites; a specific `"real estate companies in Canada"` query returned 90. A
+500-email target still depends on how many public company websites Google can
+discover and how many emails those sites publish. Use a specific industry, add
+domains manually, or run the local async server for the longest jobs. Extraction
+does not verify deliverability.
 
 ---
 
