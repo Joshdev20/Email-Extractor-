@@ -587,6 +587,7 @@
           ...settings,
           target_emails: remaining,
           target_websites: batch.length,
+          timeout: Math.min(10, Number(settings.timeout) || 15),
           use_places: false
         };
 
