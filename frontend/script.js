@@ -660,6 +660,9 @@
       } else if (partial) {
         el.progressMessage.textContent = `Partial extraction: ${formatNumber(results.length)} unique email(s) from ${formatNumber(aggregate.websites_crawled)} website(s)`;
         warnings.push("Some batches did not finish. The results shown are partial.");
+        if (targetEmails && !aggregate.target_reached) {
+          warnings.push(`Only ${formatNumber(results.length)} of ${formatNumber(targetEmails)} requested emails were found.`);
+        }
         setProgressState("partial");
         if (results.length) addHistory();
         toast("Partial results", el.progressMessage.textContent, "warning");
