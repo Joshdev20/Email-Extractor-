@@ -41,7 +41,7 @@ address, and Google/crawl HTTP calls use `httpx.MockTransport` with fixtures in
 - `api/index.py` - Vercel `mangum` entrypoint. `vercel.json` serves `frontend/`
   statically and routes `/api/*` to the function.
 - On Vercel (`VERCEL` env is set), `/api/config` returns
-  `sync_extraction: true` and `sync_batch_size: 6`. For natural-language
+  `sync_extraction: true` and `sync_batch_size: 4`. For natural-language
   queries the frontend calls `/api/search`, splits the discovered websites into
   batches, calls `/api/extract-sync` once per batch, and merges the results in
   the browser. Manual domain lists are batched directly. Serverless functions

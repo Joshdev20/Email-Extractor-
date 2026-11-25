@@ -70,7 +70,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "3")))
 MAX_JOB_SECONDS = max(60, int(os.getenv("MAX_JOB_SECONDS", "1800")))
 SYNC_MAX_SECONDS = max(10, min(300, int(os.getenv("SYNC_MAX_SECONDS", "55"))))
-SYNC_BATCH_SIZE = max(3, min(50, int(os.getenv("SYNC_BATCH_SIZE", "6"))))
+SYNC_BATCH_SIZE = max(3, min(50, int(os.getenv("SYNC_BATCH_SIZE", "4"))))
 IS_SERVERLESS = bool(os.getenv("VERCEL")) or os.getenv("SYNC_EXTRACTION", "0") == "1"
 JOB_TTL_SECONDS = max(60, int(os.getenv("JOB_TTL_SECONDS", "900")))
 MAX_RETAINED_JOBS = max(10, int(os.getenv("MAX_RETAINED_JOBS", "50")))

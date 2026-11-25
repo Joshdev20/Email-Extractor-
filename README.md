@@ -102,7 +102,7 @@ Copy `.env.example` to `.env`. Never commit `.env`.
 | `MAX_JOB_SECONDS` | No | Hard job timeout, default `1800` |
 | `SYNC_EXTRACTION` | No | Set `1` to run each extraction inside one request; Vercel sets this automatically |
 | `SYNC_MAX_SECONDS` | No | Timeout for one synchronous request, default `55` |
-| `SYNC_BATCH_SIZE` | No | Websites per browser-orchestrated sync batch, default `6` |
+| `SYNC_BATCH_SIZE` | No | Websites per browser-orchestrated sync batch, default `4` |
 | `JOB_TTL_SECONDS` | No | In-memory job retention, default `900` |
 | `MAX_RETAINED_JOBS` | No | Maximum retained job snapshots, default `50` |
 | `RATE_LIMIT_PER_MINUTE` | No | General per-client request limit, default `120` |
@@ -141,7 +141,7 @@ The repository includes a Vercel entrypoint and static routing:
    `"google_places_configured": true`.
 
 Vercel uses the synchronous extraction path. `/api/config` returns
-`"sync_extraction": true` and `"sync_batch_size": 6`. The browser first asks
+`"sync_extraction": true` and `"sync_batch_size": 4`. The browser first asks
 `/api/search` for company websites, then sends bounded batches of those websites
 to `/api/extract-sync`. It merges the batch results locally, removes duplicates,
 and keeps the completed set in the browser. This is necessary because a
