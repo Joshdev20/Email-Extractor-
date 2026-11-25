@@ -145,10 +145,12 @@ function runs discovery and crawling inside one HTTP request and returns the
 results directly. This is necessary because a serverless function cannot keep
 an in-memory background job alive after it sends a response.
 
-`vercel.json` requests `maxDuration: 60` seconds. Vercel plan limits still apply.
-Large jobs should run on the local async server, where the UI uses SSE and
-`/api/extract`. No job state is shared between Vercel invocations, and no
-database is used.
+`vercel.json` uses the legacy `builds` format for the Python function and the
+static frontend. Vercel rejects a `functions` block in the same file, so set the
+function duration in **Vercel → Project → Settings → Functions → Max Duration**
+(for example, 60 seconds). Vercel plan limits still apply. Large jobs should run
+on the local async server, where the UI uses SSE and `/api/extract`. No job
+state is shared between Vercel invocations, and no database is used.
 
 ---
 
